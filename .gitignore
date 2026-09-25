@@ -1,0 +1,7 @@
+# Arquivos gerados
+__pycache__/
+dist/
+
+# Contas e relatórios têm dados de clientes: não versionar
+*.pdf
+*.xlsx

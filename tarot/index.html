@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tarot das Três Cartas</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>✦ Tarot das Três Cartas ✦</h1>
+    <p class="subtitulo">Passado · Presente · Futuro</p>
+  </header>
+
+  <main>
+    <section id="etapa-assunto" class="painel">
+      <h2>1. Sobre o que você quer conselho?</h2>
+      <div id="assuntos" class="assuntos" role="radiogroup" aria-label="Assunto"></div>
+      <label class="campo">
+        <span>Ou escreva seu próprio assunto</span>
+        <input id="assunto-livre" type="text" maxlength="80"
+               placeholder="Ex.: minha mudança de cidade, um concurso, uma viagem…">
+      </label>
+      <label class="campo">
+        <span>Sua pergunta (opcional)</span>
+        <input id="pergunta" type="text" maxlength="140"
+               placeholder="Ex.: O que preciso saber neste momento?">
+      </label>
+    </section>
+
+    <section class="painel mesa">
+      <h2 id="instrucao">2. Escolha um assunto para liberar o baralho</h2>
+
+      <button id="baralho" class="baralho" type="button" disabled
+              aria-label="Embaralhar e tirar três cartas">
+        <span class="carta-verso"></span>
+        <span class="carta-verso"></span>
+        <span class="carta-verso"></span>
+        <span class="carta-verso"></span>
+        <span class="carta-verso topo"><span class="dica">Toque para tirar</span></span>
+      </button>
+
+      <div id="tiragem" class="tiragem"></div>
+    </section>
+
+    <section id="resultado" class="painel resultado" hidden>
+      <h2>3. Sua leitura</h2>
+      <div id="leitura"></div>
+      <button id="nova-leitura" class="botao" type="button">Nova leitura</button>
+    </section>
+  </main>
+
+  <footer>
+    As leituras são geradas para fins de entretenimento e reflexão.
+  </footer>
+
+  <script src="cartas.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,10 +1,11 @@
 # Tarot das Três Cartas
 
-Aplicativo web estático (HTML, CSS e JavaScript puro, sem dependências) com duas abas:
+Aplicativo web estático (HTML, CSS e JavaScript puro, sem dependências) com três abas:
 
 - **Tirar cartas**: leitura de três cartas — Passado · Presente · Futuro.
-- **Consultar cartas**: o usuário escolhe as três cartas na galeria e recebe a mesma leitura de
+- **Consultar tiragem**: o usuário escolhe as três cartas na galeria e recebe a mesma leitura de
   Passado · Presente · Futuro, com o resultado combinado.
+- **Glossário**: o significado individual de cada uma das 22 cartas.
 
 ## Como usar
 
@@ -17,7 +18,7 @@ Aplicativo web estático (HTML, CSS e JavaScript puro, sem dependências) com du
 4. A leitura mostra o significado de cada carta na sua posição e um resultado provável
    (Favorável, Em equilíbrio ou Desafiador), com um conselho final.
 
-### Consultar cartas
+### Consultar tiragem
 
 1. Escolha um assunto padrão ou escreva um próprio, e opcionalmente uma pergunta.
 2. Busque por nome, número (romano ou arábico) ou palavra-chave e toque em três cartas da galeria:
@@ -29,6 +30,14 @@ Aplicativo web estático (HTML, CSS e JavaScript puro, sem dependências) com du
 4. Com as três cartas e um assunto escolhidos, aparece o resultado provável, calculado igual ao da
    aba "Tirar cartas".
 
+### Glossário
+
+1. Digite o nome, número ou palavra-chave da carta (quando sobra só uma, ela já aparece; Enter mostra
+   a primeira encontrada) ou toque na imagem.
+2. A carta aparece com energia, grupo temático, significado em pé e invertida, conselho, reflexão,
+   ação prática, significado em cada assunto, ritmo e combinações marcantes.
+3. Os botões no fim passam para a carta anterior ou a próxima.
+
 Para servir localmente: `python -m http.server` dentro desta pasta.
 
 ## Organização
@@ -38,10 +47,11 @@ Para servir localmente: `python -m http.server` dentro desta pasta.
 | `index.html` | Estrutura da página |
 | `style.css` | Visual, baralho e animação de virar as cartas |
 | `cartas.js` | Os 22 Arcanos Maiores, com significados gerais, invertidos e por assunto |
-| `comum.js` | Seletores (assunto, estado de espírito, nome), face da carta e troca de abas |
+| `comum.js` | Seletores (assunto, estado de espírito, nome), galeria com busca, face da carta e troca de abas |
 | `interpretacao.js` | Textos de aprofundamento e montagem da leitura personalizada |
 | `tiragem.js` | Aba "Tirar cartas": sorteio, animações e leitura |
-| `consulta.js` | Aba "Consultar cartas": busca, escolha das três cartas e leitura |
+| `consulta.js` | Aba "Consultar tiragem": escolha das três cartas e leitura |
+| `glossario.js` | Aba "Glossário": significado individual de cada carta |
 | `imagens/` | Imagens das cartas: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons |
 
 ## Como a leitura é montada

@@ -123,6 +123,49 @@ function frenteDaCarta(carta) {
   return conteudo;
 }
 
+// ---------- Galeria de cartas ----------
+
+function textoDeBusca(carta) {
+  return semAcentos([carta.nome, carta.numero, String(carta.indice), ...carta.palavras].join(" "));
+}
+
+// Monta a galeria com as 22 cartas e liga o campo de busca.
+// el: { galeria, busca, contagem, vazia }; aoTocar(carta) é chamado quando uma carta é tocada.
+// Retorna a função de filtro, que devolve as cartas visíveis.
+function criarGaleria(el, aoTocar) {
+  for (const carta of CARTAS) {
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.className = "miniatura";
+    botao.dataset.indice = carta.indice;
+    botao.dataset.busca = textoDeBusca(carta);
+    botao.setAttribute("aria-pressed", "false");
+    botao.innerHTML = `
+      <span class="miniatura-imagem"><span class="miniatura-posicao" hidden></span></span>
+      <span class="miniatura-nome">${carta.numero} · ${carta.nome}</span>`;
+    botao.querySelector(".miniatura-imagem").appendChild(frenteDaCarta(carta));
+    botao.addEventListener("click", () => aoTocar(carta));
+    el.galeria.appendChild(botao);
+  }
+
+  function filtrar() {
+    const termos = semAcentos(el.busca.value).split(/\s+/).filter(Boolean);
+    const visiveis = [];
+    for (const botao of el.galeria.children) {
+      const mostra = termos.every((t) => botao.dataset.busca.includes(t));
+      botao.hidden = !mostra;
+      if (mostra) visiveis.push(CARTAS[Number(botao.dataset.indice)]);
+    }
+    el.contagem.textContent = `${visiveis.length} de ${CARTAS.length} cartas`;
+    el.vazia.hidden = visiveis.length > 0;
+    return visiveis;
+  }
+
+  el.busca.addEventListener("input", filtrar);
+  filtrar();
+  return filtrar;
+}
+
 // ---------- Abas ----------
 
 (function montarAbas() {

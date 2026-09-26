@@ -9,12 +9,13 @@
 <body>
   <header>
     <h1>✦ Tarot das Três Cartas ✦</h1>
-    <p class="subtitulo">Leitura · Consulta dos Arcanos</p>
+    <p class="subtitulo">Leitura · Consulta · Glossário dos Arcanos</p>
   </header>
 
   <nav class="abas" role="tablist" aria-label="Seções">
     <button type="button" role="tab" id="aba-tiragem" data-aba="tirar" aria-controls="painel-tiragem">🃏 Tirar cartas</button>
-    <button type="button" role="tab" id="aba-consulta" data-aba="consultar" aria-controls="painel-consulta">🔎 Consultar cartas</button>
+    <button type="button" role="tab" id="aba-consulta" data-aba="consultar" aria-controls="painel-consulta">🔎 Consultar tiragem</button>
+    <button type="button" role="tab" id="aba-glossario" data-aba="glossario" aria-controls="painel-glossario">📖 Glossário</button>
   </nav>
 
   <main id="painel-tiragem" role="tabpanel" aria-labelledby="aba-tiragem">
@@ -113,6 +114,22 @@
     </section>
   </main>
 
+  <main id="painel-glossario" role="tabpanel" aria-labelledby="aba-glossario" hidden>
+    <section class="painel">
+      <h2>Glossário dos Arcanos Maiores</h2>
+      <p class="nota">Digite o nome da carta ou toque na imagem para ver o significado dela sozinha.</p>
+      <label class="campo">
+        <span>Buscar por nome, número ou palavra-chave</span>
+        <input id="glossario-busca" type="search" placeholder="Ex.: morte, XVII, esperança…">
+      </label>
+      <p id="glossario-contagem" class="nota" aria-live="polite"></p>
+      <div id="glossario-galeria" class="galeria"></div>
+      <p id="glossario-vazia" class="nota" hidden>Nenhuma carta encontrada.</p>
+    </section>
+
+    <section id="glossario-detalhe" class="painel" hidden aria-live="polite"></section>
+  </main>
+
   <footer>
     As leituras são geradas para fins de entretenimento e reflexão.<br>
     Imagens: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons.
@@ -123,5 +140,6 @@
   <script src="interpretacao.js"></script>
   <script src="tiragem.js"></script>
   <script src="consulta.js"></script>
+  <script src="glossario.js"></script>
 </body>
 </html>

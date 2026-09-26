@@ -1,4 +1,4 @@
-// Aba "Consultar cartas": o usuário escolhe na galeria as três cartas da tiragem
+// Aba "Consultar tiragem": o usuário escolhe na galeria as três cartas da tiragem
 // (Passado, Presente, Futuro) e vê o significado de cada uma e o resultado combinado.
 (() => {
 const el = {
@@ -7,7 +7,7 @@ const el = {
   contagem: document.getElementById("busca-contagem"),
   progresso: document.getElementById("consulta-progresso"),
   galeria: document.getElementById("galeria"),
-  nenhuma: document.getElementById("galeria-vazia"),
+  vazia: document.getElementById("galeria-vazia"),
   resultado: document.getElementById("consulta-resultado"),
   lista: document.getElementById("consulta-lista"),
   sintese: document.getElementById("consulta-sintese"),
@@ -28,41 +28,6 @@ const sentimentoAtual = criarSeletorSentimento(
   document.getElementById("consulta-sentimentos"),
   () => desenharSintese(assuntoAtual())
 );
-
-// ---------- Galeria e busca ----------
-
-function textoDeBusca(carta) {
-  return semAcentos([carta.nome, carta.numero, String(carta.indice), ...carta.palavras].join(" "));
-}
-
-function montarGaleria() {
-  for (const carta of CARTAS) {
-    const botao = document.createElement("button");
-    botao.type = "button";
-    botao.className = "miniatura";
-    botao.dataset.indice = carta.indice;
-    botao.dataset.busca = textoDeBusca(carta);
-    botao.setAttribute("aria-pressed", "false");
-    botao.innerHTML = `
-      <span class="miniatura-imagem"><span class="miniatura-posicao" hidden></span></span>
-      <span class="miniatura-nome">${carta.numero} · ${carta.nome}</span>`;
-    botao.querySelector(".miniatura-imagem").appendChild(frenteDaCarta(carta));
-    botao.addEventListener("click", () => alternar(carta));
-    el.galeria.appendChild(botao);
-  }
-}
-
-function filtrar() {
-  const termos = semAcentos(el.busca.value).split(/\s+/).filter(Boolean);
-  let visiveis = 0;
-  for (const botao of el.galeria.children) {
-    const mostra = termos.every((t) => botao.dataset.busca.includes(t));
-    botao.hidden = !mostra;
-    if (mostra) visiveis++;
-  }
-  el.contagem.textContent = `${visiveis} de ${CARTAS.length} cartas`;
-  el.nenhuma.hidden = visiveis > 0;
-}
 
 // ---------- Seleção ----------
 
@@ -206,14 +171,12 @@ function desenhar() {
   desenharSintese(assunto);
 }
 
-el.busca.addEventListener("input", filtrar);
 el.pergunta.addEventListener("input", () => desenharSintese(assuntoAtual()));
 el.limpar.addEventListener("click", () => {
   posicoes = POSICOES.map(() => null);
   aviso = "";
   desenhar();
 });
-montarGaleria();
-filtrar();
+criarGaleria(el, alternar);
 desenhar();
 })();

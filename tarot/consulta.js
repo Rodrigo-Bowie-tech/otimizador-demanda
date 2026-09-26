@@ -1,22 +1,27 @@
-// Aba "Consultar cartas": busca na galeria e significado das cartas escolhidas conforme o assunto.
+// Aba "Consultar cartas": o usuário escolhe na galeria as três cartas da tiragem
+// (Passado, Presente, Futuro) e vê o significado de cada uma e o resultado combinado.
 (() => {
 const el = {
+  pergunta: document.getElementById("consulta-pergunta"),
   busca: document.getElementById("busca"),
   contagem: document.getElementById("busca-contagem"),
+  progresso: document.getElementById("consulta-progresso"),
   galeria: document.getElementById("galeria"),
   nenhuma: document.getElementById("galeria-vazia"),
   resultado: document.getElementById("consulta-resultado"),
   lista: document.getElementById("consulta-lista"),
+  sintese: document.getElementById("consulta-sintese"),
   limpar: document.getElementById("consulta-limpar")
 };
 
-// Cartas escolhidas, na ordem em que foram adicionadas: { carta, invertida }.
-let selecionadas = [];
+// Uma entrada por posição de POSICOES: { carta, invertida }, ou null enquanto está vazia.
+let posicoes = POSICOES.map(() => null);
+let aviso = "";
 
 const assuntoAtual = criarSeletorAssunto(
   document.getElementById("consulta-assuntos"),
   document.getElementById("consulta-assunto-livre"),
-  () => desenharSelecionadas()
+  () => desenhar()
 );
 
 // ---------- Galeria e busca ----------
@@ -33,7 +38,9 @@ function montarGaleria() {
     botao.dataset.indice = carta.indice;
     botao.dataset.busca = textoDeBusca(carta);
     botao.setAttribute("aria-pressed", "false");
-    botao.innerHTML = `<span class="miniatura-imagem"></span><span class="miniatura-nome">${carta.numero} · ${carta.nome}</span>`;
+    botao.innerHTML = `
+      <span class="miniatura-imagem"><span class="miniatura-posicao" hidden></span></span>
+      <span class="miniatura-nome">${carta.numero} · ${carta.nome}</span>`;
     botao.querySelector(".miniatura-imagem").appendChild(frenteDaCarta(carta));
     botao.addEventListener("click", () => alternar(carta));
     el.galeria.appendChild(botao);
@@ -54,19 +61,48 @@ function filtrar() {
 
 // ---------- Seleção ----------
 
+const quantas = () => posicoes.filter(Boolean).length;
+
+// Tocar numa carta escolhida tira ela da sua posição; uma carta nova ocupa a primeira posição vazia.
 function alternar(carta) {
-  const ja = selecionadas.some((s) => s.carta === carta);
-  selecionadas = ja ? selecionadas.filter((s) => s.carta !== carta) : [...selecionadas, { carta, invertida: false }];
-  desenharSelecionadas();
-  if (!ja) {
-    el.lista.lastElementChild.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  aviso = "";
+  const ocupada = posicoes.findIndex((p) => p && p.carta === carta);
+  if (ocupada >= 0) {
+    posicoes[ocupada] = null;
+  } else {
+    const livre = posicoes.indexOf(null);
+    if (livre < 0) {
+      aviso = "Você já escolheu as três cartas. Remova uma para trocar.";
+      desenhar();
+      return;
+    }
+    posicoes[livre] = { carta, invertida: false };
+  }
+  desenhar();
+  if (ocupada < 0 && quantas() === POSICOES.length) {
+    el.resultado.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
 function marcarGaleria() {
   for (const botao of el.galeria.children) {
-    const marcada = selecionadas.some((s) => s.carta.indice === Number(botao.dataset.indice));
-    botao.setAttribute("aria-pressed", String(marcada));
+    const i = posicoes.findIndex((p) => p && p.carta.indice === Number(botao.dataset.indice));
+    botao.setAttribute("aria-pressed", String(i >= 0));
+    const etiqueta = botao.querySelector(".miniatura-posicao");
+    etiqueta.hidden = i < 0;
+    etiqueta.textContent = i >= 0 ? POSICOES[i].nome : "";
+  }
+}
+
+function mostrarProgresso() {
+  const livre = posicoes.indexOf(null);
+  el.progresso.classList.toggle("alerta", Boolean(aviso));
+  if (aviso) {
+    el.progresso.textContent = aviso;
+  } else if (livre < 0) {
+    el.progresso.textContent = "Três cartas escolhidas. Veja a leitura abaixo.";
+  } else {
+    el.progresso.textContent = `Toque na carta do ${POSICOES[livre].nome} (${quantas()} de ${POSICOES.length} escolhidas).`;
   }
 }
 
@@ -103,46 +139,74 @@ function significado(s, assunto) {
     <p><strong>Conselho:</strong> ${maiuscula(carta.conselho)}.</p>`;
 }
 
-function desenharSelecionadas() {
-  marcarGaleria();
-  el.resultado.hidden = selecionadas.length === 0;
-  el.lista.innerHTML = "";
-  const assunto = assuntoAtual();
+function artigoVazio(i) {
+  const artigo = document.createElement("article");
+  artigo.className = "consulta-carta";
+  artigo.innerHTML = `
+    <figure class="consulta-figura vazia" aria-hidden="true">?</figure>
+    <div class="consulta-texto">
+      <p class="posicao-rotulo">${POSICOES[i].nome} <small>— ${POSICOES[i].descricao}</small></p>
+      <p class="nota">Escolha na galeria a carta do ${POSICOES[i].nome}.</p>
+    </div>`;
+  return artigo;
+}
 
-  for (const s of selecionadas) {
-    const artigo = document.createElement("article");
-    artigo.className = "consulta-carta";
-    artigo.innerHTML = `
-      <figure class="consulta-figura${s.invertida ? " invertida" : ""}"></figure>
-      <div class="consulta-texto">
-        <div class="consulta-topo">
-          <h3>${s.carta.numero} · ${s.carta.nome}</h3>
-          <button type="button" class="remover" aria-label="Remover ${s.carta.nome}">✕</button>
-        </div>
-        <div class="orientacao" role="radiogroup" aria-label="Posição da carta">
-          <button type="button" role="radio" aria-checked="${!s.invertida}" data-invertida="false">Em pé</button>
-          <button type="button" role="radio" aria-checked="${s.invertida}" data-invertida="true">Invertida</button>
-        </div>
-        ${significado(s, assunto)}
-      </div>`;
-    artigo.querySelector("figure").appendChild(frenteDaCarta(s.carta));
-    artigo.querySelector(".remover").addEventListener("click", () => alternar(s.carta));
-    for (const botao of artigo.querySelectorAll(".orientacao button")) {
-      botao.addEventListener("click", () => {
-        s.invertida = botao.dataset.invertida === "true";
-        desenharSelecionadas();
-      });
-    }
-    el.lista.appendChild(artigo);
+function artigoDaCarta(s, i, assunto) {
+  const artigo = document.createElement("article");
+  artigo.className = "consulta-carta";
+  artigo.innerHTML = `
+    <figure class="consulta-figura${s.invertida ? " invertida" : ""}"></figure>
+    <div class="consulta-texto">
+      <p class="posicao-rotulo">${POSICOES[i].nome} <small>— ${POSICOES[i].descricao}</small></p>
+      <div class="consulta-topo">
+        <h3>${s.carta.numero} · ${s.carta.nome}</h3>
+        <button type="button" class="remover" aria-label="Remover ${s.carta.nome}">✕</button>
+      </div>
+      <div class="orientacao" role="radiogroup" aria-label="Posição da carta">
+        <button type="button" role="radio" aria-checked="${!s.invertida}" data-invertida="false">Em pé</button>
+        <button type="button" role="radio" aria-checked="${s.invertida}" data-invertida="true">Invertida</button>
+      </div>
+      ${significado(s, assunto)}
+    </div>`;
+  artigo.querySelector("figure").appendChild(frenteDaCarta(s.carta));
+  artigo.querySelector(".remover").addEventListener("click", () => alternar(s.carta));
+  for (const botao of artigo.querySelectorAll(".orientacao button")) {
+    botao.addEventListener("click", () => {
+      s.invertida = botao.dataset.invertida === "true";
+      desenhar();
+    });
+  }
+  return artigo;
+}
+
+function desenharSintese(assunto) {
+  const faltam = POSICOES.length - quantas();
+  if (faltam > 0) {
+    el.sintese.innerHTML = `<p class="nota">Escolha mais ${faltam} carta${faltam > 1 ? "s" : ""} para ver o resultado combinado.</p>`;
+  } else if (!assunto) {
+    el.sintese.innerHTML = `<p class="nota">Escolha um assunto no passo 1 para ver o resultado combinado.</p>`;
+  } else {
+    el.sintese.innerHTML = contextoDaLeitura(assunto, el.pergunta.value.trim()) + sintese(posicoes, assunto);
   }
 }
 
+function desenhar() {
+  marcarGaleria();
+  mostrarProgresso();
+  el.resultado.hidden = quantas() === 0;
+  const assunto = assuntoAtual();
+  el.lista.replaceChildren(...posicoes.map((s, i) => (s ? artigoDaCarta(s, i, assunto) : artigoVazio(i))));
+  desenharSintese(assunto);
+}
+
 el.busca.addEventListener("input", filtrar);
+el.pergunta.addEventListener("input", () => desenharSintese(assuntoAtual()));
 el.limpar.addEventListener("click", () => {
-  selecionadas = [];
-  desenharSelecionadas();
+  posicoes = POSICOES.map(() => null);
+  aviso = "";
+  desenhar();
 });
 montarGaleria();
 filtrar();
-desenharSelecionadas();
+desenhar();
 })();

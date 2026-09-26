@@ -108,47 +108,7 @@ async function tirarCartas() {
   lendo = false;
 }
 
-function sintese(sorteadas, assunto) {
-  // O futuro pesa mais por ser a tendência da questão.
-  const pesos = [1, 1, 1.5];
-  const pontos = sorteadas.reduce((soma, s, i) => soma + tomEfetivo(s) * pesos[i], 0);
-  const nomeAssunto = assunto.padrao ? assunto.nome.toLowerCase() : `“${escaparHtml(assunto.nome)}”`;
-
-  let tom, rotulo, texto;
-  if (pontos >= 1.5) {
-    tom = "favoravel";
-    rotulo = "Favorável";
-    texto = `As energias são positivas para ${nomeAssunto}. O caminho tende a se abrir, e as suas atitudes estão alinhadas com o que deseja. Aproveite o momento para agir.`;
-  } else if (pontos <= -1.5) {
-    tom = "desafiador";
-    rotulo = "Desafiador";
-    texto = `As cartas mostram obstáculos em ${nomeAssunto}. Não é um “não” definitivo, mas um alerta: há padrões a rever e decisões que pedem cautela antes de avançar.`;
-  } else {
-    tom = "equilibrado";
-    rotulo = "Em equilíbrio";
-    texto = `A situação em ${nomeAssunto} está em aberto, com forças que se equilibram. O resultado depende muito das escolhas que você fizer a partir de agora.`;
-  }
-
-  const trechos = sorteadas.map(({ carta, invertida }) => {
-    const palavra = carta.palavras[0];
-    if (!invertida) return palavra;
-    return carta.tom < 0 ? `superação de ${palavra}` : `${palavra} em desequilíbrio`;
-  });
-  const narrativa = `Você vem de um período marcado por <strong>${trechos[0]}</strong>, vive agora um momento de <strong>${trechos[1]}</strong> e caminha para <strong>${trechos[2]}</strong>.`;
-  const conselhoFinal = maiuscula(sorteadas[2].carta.conselho);
-
-  return `
-    <div class="sintese">
-      <h3>Resultado provável <span class="selo ${tom}">${rotulo}</span></h3>
-      <p>${narrativa}</p>
-      <p>${texto}</p>
-      <p><strong>Conselho final:</strong> ${conselhoFinal}.</p>
-    </div>`;
-}
-
 function mostrarLeitura(assunto, pergunta, sorteadas) {
-  const contexto = `Assunto: <strong>${escaparHtml(assunto.nome)}</strong>` +
-    (pergunta ? ` · Pergunta: <em>${escaparHtml(pergunta)}</em>` : "");
 
   const cartas = sorteadas.map((s, i) => `
     <article class="leitura-carta">
@@ -159,7 +119,7 @@ function mostrarLeitura(assunto, pergunta, sorteadas) {
       <p><strong>Conselho:</strong> ${maiuscula(s.carta.conselho)}.</p>
     </article>`).join("");
 
-  el.leitura.innerHTML = `<p class="contexto">${contexto}</p>${cartas}${sintese(sorteadas, assunto)}`;
+  el.leitura.innerHTML = `${contextoDaLeitura(assunto, pergunta)}${cartas}${sintese(sorteadas, assunto)}`;
   el.resultado.hidden = false;
   el.resultado.scrollIntoView({ behavior: "smooth", block: "start" });
 }

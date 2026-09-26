@@ -87,6 +87,51 @@ function textoDaCarta({ carta, invertida }, assunto, comGeral = true) {
   return maiuscula(doTema || carta.normal) + ".";
 }
 
+// Linha com o assunto e a pergunta, no topo da leitura.
+function contextoDaLeitura(assunto, pergunta) {
+  return `<p class="contexto">Assunto: <strong>${escaparHtml(assunto.nome)}</strong>` +
+    (pergunta ? ` · Pergunta: <em>${escaparHtml(pergunta)}</em>` : "") + "</p>";
+}
+
+// Resultado provável de uma tiragem de três cartas, na ordem Passado, Presente, Futuro.
+function sintese(sorteadas, assunto) {
+  // O futuro pesa mais por ser a tendência da questão.
+  const pesos = [1, 1, 1.5];
+  const pontos = sorteadas.reduce((soma, s, i) => soma + tomEfetivo(s) * pesos[i], 0);
+  const nomeAssunto = assunto.padrao ? assunto.nome.toLowerCase() : `“${escaparHtml(assunto.nome)}”`;
+
+  let tom, rotulo, texto;
+  if (pontos >= 1.5) {
+    tom = "favoravel";
+    rotulo = "Favorável";
+    texto = `As energias são positivas para ${nomeAssunto}. O caminho tende a se abrir, e as suas atitudes estão alinhadas com o que deseja. Aproveite o momento para agir.`;
+  } else if (pontos <= -1.5) {
+    tom = "desafiador";
+    rotulo = "Desafiador";
+    texto = `As cartas mostram obstáculos em ${nomeAssunto}. Não é um “não” definitivo, mas um alerta: há padrões a rever e decisões que pedem cautela antes de avançar.`;
+  } else {
+    tom = "equilibrado";
+    rotulo = "Em equilíbrio";
+    texto = `A situação em ${nomeAssunto} está em aberto, com forças que se equilibram. O resultado depende muito das escolhas que você fizer a partir de agora.`;
+  }
+
+  const trechos = sorteadas.map(({ carta, invertida }) => {
+    const palavra = carta.palavras[0];
+    if (!invertida) return palavra;
+    return carta.tom < 0 ? `superação de ${palavra}` : `${palavra} em desequilíbrio`;
+  });
+  const narrativa = `Você vem de um período marcado por <strong>${trechos[0]}</strong>, vive agora um momento de <strong>${trechos[1]}</strong> e caminha para <strong>${trechos[2]}</strong>.`;
+  const conselhoFinal = maiuscula(sorteadas[2].carta.conselho);
+
+  return `
+    <div class="sintese">
+      <h3>Resultado provável <span class="selo ${tom}">${rotulo}</span></h3>
+      <p>${narrativa}</p>
+      <p>${texto}</p>
+      <p><strong>Conselho final:</strong> ${conselhoFinal}.</p>
+    </div>`;
+}
+
 // ---------- Face da carta ----------
 
 // Frente com a imagem da carta; se a imagem não carregar, mostra número, símbolo e nome.

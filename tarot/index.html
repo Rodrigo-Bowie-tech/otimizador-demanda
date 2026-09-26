@@ -64,26 +64,34 @@
         <input id="consulta-assunto-livre" type="text" maxlength="80"
                placeholder="Ex.: minha mudança de cidade, um concurso, uma viagem…">
       </label>
-      <p class="nota">Sem assunto escolhido, cada carta mostra seu significado em todos os assuntos.</p>
+      <label class="campo">
+        <span>Sua pergunta (opcional)</span>
+        <input id="consulta-pergunta" type="text" maxlength="140"
+               placeholder="Ex.: O que preciso saber neste momento?">
+      </label>
+      <p class="nota">Sem assunto, cada carta mostra seu significado em todos os assuntos, mas o resultado combinado só aparece com um assunto escolhido.</p>
     </section>
 
     <section class="painel">
-      <h2>2. Busque e toque nas cartas</h2>
+      <h2>2. Escolha três cartas</h2>
+      <p class="nota">A primeira carta escolhida é o Passado, a segunda o Presente e a terceira o Futuro.</p>
       <label class="campo">
         <span>Buscar por nome, número ou palavra-chave</span>
         <input id="busca" type="search" placeholder="Ex.: estrela, 13, coragem…">
       </label>
       <p id="busca-contagem" class="nota" aria-live="polite"></p>
+      <p id="consulta-progresso" class="progresso" aria-live="polite"></p>
       <div id="galeria" class="galeria"></div>
       <p id="galeria-vazia" class="nota" hidden>Nenhuma carta encontrada.</p>
     </section>
 
     <section id="consulta-resultado" class="painel" hidden>
       <div class="consulta-cabecalho">
-        <h2>3. Cartas selecionadas</h2>
+        <h2>3. Sua leitura</h2>
         <button id="consulta-limpar" type="button" class="botao-secundario">Limpar seleção</button>
       </div>
       <div id="consulta-lista"></div>
+      <div id="consulta-sintese"></div>
     </section>
   </main>
 

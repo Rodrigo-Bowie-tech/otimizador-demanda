@@ -3,7 +3,8 @@
 Aplicativo web estático (HTML, CSS e JavaScript puro, sem dependências) com duas abas:
 
 - **Tirar cartas**: leitura de três cartas — Passado · Presente · Futuro.
-- **Consultar cartas**: busca nos 22 Arcanos Maiores e significado das cartas escolhidas por assunto.
+- **Consultar cartas**: o usuário escolhe as três cartas na galeria e recebe a mesma leitura de
+  Passado · Presente · Futuro, com o resultado combinado.
 
 ## Como usar
 
@@ -18,11 +19,15 @@ Aplicativo web estático (HTML, CSS e JavaScript puro, sem dependências) com du
 
 ### Consultar cartas
 
-1. Escolha um assunto padrão ou escreva um próprio. Sem assunto, cada carta mostra o significado
-   em todos os assuntos padrão.
-2. Busque por nome, número (romano ou arábico) ou palavra-chave e toque nas cartas da galeria.
-3. Cada carta escolhida aparece com a imagem, o significado geral, o significado para o assunto e
-   um conselho. Dá para alternar entre **Em pé** e **Invertida** e remover cartas.
+1. Escolha um assunto padrão ou escreva um próprio, e opcionalmente uma pergunta.
+2. Busque por nome, número (romano ou arábico) ou palavra-chave e toque em três cartas da galeria:
+   a primeira é o Passado, a segunda o Presente e a terceira o Futuro. Tocar de novo numa carta
+   escolhida libera a posição, e a próxima carta tocada ocupa a posição vazia.
+3. Cada carta aparece com a imagem, o significado geral, o significado para o assunto e um conselho,
+   com opção de **Em pé** ou **Invertida**. Sem assunto, cada carta mostra o significado em todos os
+   assuntos padrão.
+4. Com as três cartas e um assunto escolhidos, aparece o resultado provável, calculado igual ao da
+   aba "Tirar cartas".
 
 Para servir localmente: `python -m http.server` dentro desta pasta.
 
@@ -33,9 +38,9 @@ Para servir localmente: `python -m http.server` dentro desta pasta.
 | `index.html` | Estrutura da página |
 | `style.css` | Visual, baralho e animação de virar as cartas |
 | `cartas.js` | Os 22 Arcanos Maiores, com significados gerais, invertidos e por assunto |
-| `comum.js` | Seletor de assunto, interpretação, face da carta e troca de abas |
-| `tiragem.js` | Aba "Tirar cartas": sorteio, animações e leitura com resultado provável |
-| `consulta.js` | Aba "Consultar cartas": busca, galeria e significados |
+| `comum.js` | Seletor de assunto, interpretação, resultado provável, face da carta e troca de abas |
+| `tiragem.js` | Aba "Tirar cartas": sorteio, animações e leitura |
+| `consulta.js` | Aba "Consultar cartas": busca, escolha das três cartas e leitura |
 | `imagens/` | Imagens das cartas: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons |
 
 ## Como a leitura é montada

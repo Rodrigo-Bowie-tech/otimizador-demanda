@@ -1,6 +1,6 @@
 // Arcanos Maiores.
 // tom: energia da carta na posição normal (1 favorável, 0 neutra, -1 desafiadora).
-// temas: leitura da carta em pé para cada assunto padrão; os demais assuntos usam "normal".
+// temas: leitura da carta em pé para cada assunto padrão; assuntos digitados usam "normal".
 const CARTAS = [
   {
     numero: "0", nome: "O Louco", simbolo: "🎒", tom: 1,
@@ -13,7 +13,9 @@ const CARTAS = [
       trabalho: "uma oportunidade inesperada, um projeto novo ou uma mudança de rumo",
       familia: "um período de renovação nos laços, com mais leveza e menos cobrança",
       dinheiro: "vontade de arriscar; há chance de ganho, desde que haja algum planejamento",
-      saude: "disposição para começar novos hábitos com entusiasmo"
+      saude: "disposição para começar novos hábitos com entusiasmo",
+      amizades: "novas amizades e encontros inesperados que trazem leveza",
+      espiritualidade: "abertura para o novo; confie no caminho mesmo sem ver o fim"
     }
   },
   {
@@ -27,7 +29,9 @@ const CARTAS = [
       trabalho: "habilidade para realizar; é momento de apresentar ideias e tomar a frente",
       familia: "você tem as ferramentas para resolver tensões com diálogo",
       dinheiro: "criatividade para gerar renda e aproveitar recursos",
-      saude: "a força de vontade está a seu favor para cuidar de si"
+      saude: "a força de vontade está a seu favor para cuidar de si",
+      amizades: "você é quem dá o primeiro passo para aproximar as pessoas",
+      espiritualidade: "a capacidade de manifestar intenções; corpo, mente e espírito alinhados"
     }
   },
   {
@@ -41,7 +45,9 @@ const CARTAS = [
       trabalho: "informações ainda ocultas; aguarde antes de decidir",
       familia: "algo não dito pesa no ambiente; sensibilidade ajuda a entender",
       dinheiro: "prudência; nem tudo foi revelado nas propostas",
-      saude: "o corpo dá sinais sutis; preste atenção a eles"
+      saude: "o corpo dá sinais sutis; preste atenção a eles",
+      amizades: "uma amizade discreta e profunda; confie na sua percepção sobre as pessoas",
+      espiritualidade: "meditação, sonhos e intuição como guias"
     }
   },
   {
@@ -55,7 +61,9 @@ const CARTAS = [
       trabalho: "projetos que prosperam e reconhecimento pela criatividade",
       familia: "acolhimento, cuidado mútuo e possível chegada de alguém",
       dinheiro: "prosperidade e colheita de esforços anteriores",
-      saude: "vitalidade e boa relação com o próprio corpo"
+      saude: "vitalidade e boa relação com o próprio corpo",
+      amizades: "amizades acolhedoras, que nutrem e fazem crescer",
+      espiritualidade: "conexão com a natureza e com o próprio poder criativo"
     }
   },
   {
@@ -69,7 +77,9 @@ const CARTAS = [
       trabalho: "liderança, promoção ou a necessidade de organizar processos",
       familia: "uma figura de autoridade e regras claras trazem estabilidade",
       dinheiro: "controle financeiro e decisões firmes trazem segurança",
-      saude: "rotina e disciplina são o melhor remédio"
+      saude: "rotina e disciplina são o melhor remédio",
+      amizades: "amizades estáveis e leais; às vezes você é o pilar do grupo",
+      espiritualidade: "disciplina espiritual e prática constante"
     }
   },
   {
@@ -83,7 +93,9 @@ const CARTAS = [
       trabalho: "aprendizado, mentoria e seguir os caminhos estabelecidos",
       familia: "tradições familiares e a sabedoria dos mais velhos",
       dinheiro: "investimentos conservadores e conselhos de especialistas",
-      saude: "procure orientação profissional e siga as recomendações"
+      saude: "procure orientação profissional e siga as recomendações",
+      amizades: "amizades baseadas em valores em comum e em grupos com propósito",
+      espiritualidade: "busca de um mestre, de uma tradição ou de um ensinamento"
     }
   },
   {
@@ -97,7 +109,9 @@ const CARTAS = [
       trabalho: "parcerias favoráveis e uma decisão importante de carreira",
       familia: "reconciliação e harmonia entre as pessoas próximas",
       dinheiro: "uma escolha entre dois caminhos; avalie com calma",
-      saude: "equilíbrio entre corpo e emoções"
+      saude: "equilíbrio entre corpo e emoções",
+      amizades: "afinidade verdadeira; alguém com quem você se sente em casa",
+      espiritualidade: "escolher o caminho que está de acordo com o coração"
     }
   },
   {
@@ -111,7 +125,9 @@ const CARTAS = [
       trabalho: "vitória sobre obstáculos, metas alcançadas ou uma viagem a trabalho",
       familia: "você consegue conciliar interesses diferentes",
       dinheiro: "progresso financeiro com esforço direcionado",
-      saude: "recuperação e energia para seguir em frente"
+      saude: "recuperação e energia para seguir em frente",
+      amizades: "amigos que impulsionam você a avançar",
+      espiritualidade: "força de vontade para seguir no caminho escolhido"
     }
   },
   {
@@ -125,7 +141,9 @@ const CARTAS = [
       trabalho: "resiliência para lidar com pressões e pessoas difíceis",
       familia: "calma e compreensão resolvem conflitos",
       dinheiro: "autocontrole nos gastos traz resultados",
-      saude: "boa resistência e capacidade de recuperação"
+      saude: "boa resistência e capacidade de recuperação",
+      amizades: "apoio mútuo e paciência nos momentos difíceis",
+      espiritualidade: "domar os próprios impulsos com amor"
     }
   },
   {
@@ -139,7 +157,9 @@ const CARTAS = [
       trabalho: "estudo, especialização ou reavaliação da carreira",
       familia: "necessidade de espaço próprio, sem se afastar de quem ama",
       dinheiro: "cautela e planejamento de longo prazo",
-      saude: "descanso e cuidado com a saúde mental"
+      saude: "descanso e cuidado com a saúde mental",
+      amizades: "poucos amigos, mas verdadeiros; tempo para si também é necessário",
+      espiritualidade: "retiro, silêncio e busca da própria luz"
     }
   },
   {
@@ -153,7 +173,9 @@ const CARTAS = [
       trabalho: "mudança de fase, novas oportunidades surgindo",
       familia: "o fim de um ciclo difícil e o início de um melhor",
       dinheiro: "sorte e oscilações; aproveite a maré boa",
-      saude: "melhora gradual à medida que o ciclo muda"
+      saude: "melhora gradual à medida que o ciclo muda",
+      amizades: "reencontros e amizades que chegam no momento certo",
+      espiritualidade: "entender os ciclos e confiar no fluxo da vida"
     }
   },
   {
@@ -167,7 +189,9 @@ const CARTAS = [
       trabalho: "contratos, acordos e decisões justas",
       familia: "questões de partilha resolvidas com imparcialidade",
       dinheiro: "questões legais ou documentos; mantenha tudo em ordem",
-      saude: "equilíbrio na rotina e nos hábitos"
+      saude: "equilíbrio na rotina e nos hábitos",
+      amizades: "relações equilibradas, com reciprocidade e franqueza",
+      espiritualidade: "colher o que se planta; agir com integridade"
     }
   },
   {
@@ -181,7 +205,9 @@ const CARTAS = [
       trabalho: "projetos parados; use o tempo para repensar a estratégia",
       familia: "ceder um pouco pode destravar a situação",
       dinheiro: "adie decisões importantes até ter mais clareza",
-      saude: "o corpo pede pausa e descanso"
+      saude: "o corpo pede pausa e descanso",
+      amizades: "olhar a amizade por outro ângulo antes de julgar",
+      espiritualidade: "entrega e desapego; a pausa como forma de oração"
     }
   },
   {
@@ -195,7 +221,9 @@ const CARTAS = [
       trabalho: "encerramento de um ciclo profissional e abertura para outro",
       familia: "mudanças na dinâmica familiar que trazem renovação",
       dinheiro: "fim de uma fonte de renda ou de um hábito de consumo",
-      saude: "abandonar hábitos antigos em favor de novos"
+      saude: "abandonar hábitos antigos em favor de novos",
+      amizades: "amizades que se transformam; algumas se vão para outras chegarem",
+      espiritualidade: "morrer para o velho e renascer mais consciente"
     }
   },
   {
@@ -209,7 +237,9 @@ const CARTAS = [
       trabalho: "cooperação e bom equilíbrio entre trabalho e vida pessoal",
       familia: "mediação e reconciliação",
       dinheiro: "gastos equilibrados e crescimento gradual",
-      saude: "cura e restauração do equilíbrio"
+      saude: "cura e restauração do equilíbrio",
+      amizades: "harmonia no grupo e papel de mediador",
+      espiritualidade: "equilíbrio entre o mundo material e o espiritual"
     }
   },
   {
@@ -223,7 +253,9 @@ const CARTAS = [
       trabalho: "um ambiente que aprisiona ou ambição em excesso",
       familia: "padrões repetidos e relações de controle",
       dinheiro: "dívidas, gastos por impulso ou apego material",
-      saude: "atenção a vícios e hábitos nocivos"
+      saude: "atenção a vícios e hábitos nocivos",
+      amizades: "amizades que prendem ou influenciam de forma negativa",
+      espiritualidade: "encarar a própria sombra para se libertar"
     }
   },
   {
@@ -237,7 +269,9 @@ const CARTAS = [
       trabalho: "mudanças inesperadas na empresa ou na carreira",
       familia: "conflitos abertos que, apesar de dolorosos, limpam o ambiente",
       dinheiro: "despesas inesperadas; tenha uma reserva",
-      saude: "um alerta para não ignorar sintomas"
+      saude: "um alerta para não ignorar sintomas",
+      amizades: "uma decepção ou revelação que mostra quem está realmente ao seu lado",
+      espiritualidade: "um despertar súbito que derruba velhas crenças"
     }
   },
   {
@@ -251,7 +285,9 @@ const CARTAS = [
       trabalho: "inspiração, visibilidade e reconhecimento",
       familia: "cura de mágoas e paz no lar",
       dinheiro: "perspectivas otimistas e melhora gradual",
-      saude: "recuperação e renovação da energia"
+      saude: "recuperação e renovação da energia",
+      amizades: "amizades sinceras que devolvem a esperança",
+      espiritualidade: "fé renovada e conexão com algo maior"
     }
   },
   {
@@ -265,7 +301,9 @@ const CARTAS = [
       trabalho: "falta de clareza; cuidado com promessas vagas",
       familia: "mal-entendidos e emoções à flor da pele",
       dinheiro: "cuidado com golpes e negócios pouco claros",
-      saude: "ansiedade e sono agitado; cuide da mente"
+      saude: "ansiedade e sono agitado; cuide da mente",
+      amizades: "desconfiança e fofocas; nem tudo é o que parece",
+      espiritualidade: "mergulho no inconsciente, sonhos e medos a compreender"
     }
   },
   {
@@ -279,7 +317,9 @@ const CARTAS = [
       trabalho: "sucesso, reconhecimento e realização",
       familia: "alegria, celebrações e bons momentos juntos",
       dinheiro: "prosperidade e resultados positivos",
-      saude: "vitalidade e ótima energia"
+      saude: "vitalidade e ótima energia",
+      amizades: "alegria compartilhada, festas e bons encontros",
+      espiritualidade: "clareza, gratidão e alegria de viver"
     }
   },
   {
@@ -293,7 +333,9 @@ const CARTAS = [
       trabalho: "uma nova vocação ou o resultado de uma avaliação",
       familia: "perdão e reaproximação",
       dinheiro: "hora de revisar as finanças e tomar decisões conscientes",
-      saude: "renovação e decisão de mudar hábitos"
+      saude: "renovação e decisão de mudar hábitos",
+      amizades: "reatar amizades antigas e perdoar",
+      espiritualidade: "um chamado para uma missão ou para um novo nível de consciência"
     }
   },
   {
@@ -307,7 +349,9 @@ const CARTAS = [
       trabalho: "conclusão de projetos e conquista de objetivos",
       familia: "harmonia e senso de pertencimento",
       dinheiro: "estabilidade e metas financeiras atingidas",
-      saude: "bem-estar integral"
+      saude: "bem-estar integral",
+      amizades: "sentimento de pertencer a um grupo; amizades que completam",
+      espiritualidade: "integração e sensação de plenitude"
     }
   }
 ];
@@ -327,3 +371,9 @@ const POSICOES = [
   { nome: "Presente", descricao: "a energia do momento" },
   { nome: "Futuro", descricao: "a tendência do que está por vir" }
 ];
+
+// Imagens: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons.
+CARTAS.forEach((carta, i) => {
+  carta.indice = i;
+  carta.imagem = `imagens/${String(i).padStart(2, "0")}.jpg`;
+});

@@ -9,10 +9,15 @@
 <body>
   <header>
     <h1>✦ Tarot das Três Cartas ✦</h1>
-    <p class="subtitulo">Passado · Presente · Futuro</p>
+    <p class="subtitulo">Leitura · Consulta dos Arcanos</p>
   </header>
 
-  <main>
+  <nav class="abas" role="tablist" aria-label="Seções">
+    <button type="button" role="tab" id="aba-tiragem" data-aba="tirar" aria-controls="painel-tiragem">🃏 Tirar cartas</button>
+    <button type="button" role="tab" id="aba-consulta" data-aba="consultar" aria-controls="painel-consulta">🔎 Consultar cartas</button>
+  </nav>
+
+  <main id="painel-tiragem" role="tabpanel" aria-labelledby="aba-tiragem">
     <section id="etapa-assunto" class="painel">
       <h2>1. Sobre o que você quer conselho?</h2>
       <div id="assuntos" class="assuntos" role="radiogroup" aria-label="Assunto"></div>
@@ -50,11 +55,46 @@
     </section>
   </main>
 
+  <main id="painel-consulta" role="tabpanel" aria-labelledby="aba-consulta" hidden>
+    <section class="painel">
+      <h2>1. Assunto da consulta</h2>
+      <div id="consulta-assuntos" class="assuntos" role="radiogroup" aria-label="Assunto"></div>
+      <label class="campo">
+        <span>Ou escreva seu próprio assunto</span>
+        <input id="consulta-assunto-livre" type="text" maxlength="80"
+               placeholder="Ex.: minha mudança de cidade, um concurso, uma viagem…">
+      </label>
+      <p class="nota">Sem assunto escolhido, cada carta mostra seu significado em todos os assuntos.</p>
+    </section>
+
+    <section class="painel">
+      <h2>2. Busque e toque nas cartas</h2>
+      <label class="campo">
+        <span>Buscar por nome, número ou palavra-chave</span>
+        <input id="busca" type="search" placeholder="Ex.: estrela, 13, coragem…">
+      </label>
+      <p id="busca-contagem" class="nota" aria-live="polite"></p>
+      <div id="galeria" class="galeria"></div>
+      <p id="galeria-vazia" class="nota" hidden>Nenhuma carta encontrada.</p>
+    </section>
+
+    <section id="consulta-resultado" class="painel" hidden>
+      <div class="consulta-cabecalho">
+        <h2>3. Cartas selecionadas</h2>
+        <button id="consulta-limpar" type="button" class="botao-secundario">Limpar seleção</button>
+      </div>
+      <div id="consulta-lista"></div>
+    </section>
+  </main>
+
   <footer>
-    As leituras são geradas para fins de entretenimento e reflexão.
+    As leituras são geradas para fins de entretenimento e reflexão.<br>
+    Imagens: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons.
   </footer>
 
   <script src="cartas.js"></script>
-  <script src="app.js"></script>
+  <script src="comum.js"></script>
+  <script src="tiragem.js"></script>
+  <script src="consulta.js"></script>
 </body>
 </html>

@@ -1,3 +1,5 @@
+// Aba "Tirar cartas": escolha do assunto, sorteio das três cartas e leitura.
+(() => {
 const PAUSA_EMBARALHAR = 1100;
 const PAUSA_DISTRIBUIR = 250;
 const PAUSA_ANTES_DE_VIRAR = 700;
@@ -5,8 +7,6 @@ const PAUSA_ENTRE_VIRADAS = 1200;
 
 const el = {
   etapaAssunto: document.getElementById("etapa-assunto"),
-  assuntos: document.getElementById("assuntos"),
-  assuntoLivre: document.getElementById("assunto-livre"),
   pergunta: document.getElementById("pergunta"),
   instrucao: document.getElementById("instrucao"),
   baralho: document.getElementById("baralho"),
@@ -16,8 +16,13 @@ const el = {
   novaLeitura: document.getElementById("nova-leitura")
 };
 
-let assuntoSelecionado = null; // id de ASSUNTOS, ou null quando o assunto é digitado
 let lendo = false;
+
+const assuntoAtual = criarSeletorAssunto(
+  document.getElementById("assuntos"),
+  document.getElementById("assunto-livre"),
+  atualizarBaralho
+);
 
 const esperar = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
 
@@ -34,56 +39,6 @@ function embaralhar(lista) {
     [copia[i], copia[j]] = [copia[j], copia[i]];
   }
   return copia;
-}
-
-function escaparHtml(texto) {
-  return texto.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
-
-function maiuscula(texto) {
-  return texto.charAt(0).toUpperCase() + texto.slice(1);
-}
-
-// ---------- Escolha do assunto ----------
-
-function montarAssuntos() {
-  for (const assunto of ASSUNTOS) {
-    const botao = document.createElement("button");
-    botao.type = "button";
-    botao.className = "assunto";
-    botao.setAttribute("role", "radio");
-    botao.setAttribute("aria-checked", "false");
-    botao.dataset.id = assunto.id;
-    botao.textContent = `${assunto.icone} ${assunto.nome}`;
-    botao.addEventListener("click", () => selecionarAssunto(assunto.id));
-    el.assuntos.appendChild(botao);
-  }
-}
-
-function selecionarAssunto(id) {
-  assuntoSelecionado = id;
-  el.assuntoLivre.value = "";
-  for (const botao of el.assuntos.children) {
-    botao.setAttribute("aria-checked", String(botao.dataset.id === id));
-  }
-  atualizarBaralho();
-}
-
-el.assuntoLivre.addEventListener("input", () => {
-  if (el.assuntoLivre.value.trim()) {
-    assuntoSelecionado = null;
-    for (const botao of el.assuntos.children) botao.setAttribute("aria-checked", "false");
-  }
-  atualizarBaralho();
-});
-
-function assuntoAtual() {
-  if (assuntoSelecionado) {
-    const assunto = ASSUNTOS.find((a) => a.id === assuntoSelecionado);
-    return { id: assunto.id, nome: assunto.nome, padrao: true };
-  }
-  const livre = el.assuntoLivre.value.trim();
-  return livre ? { id: null, nome: livre, padrao: false } : null;
 }
 
 function atualizarBaralho() {
@@ -105,14 +60,9 @@ function criarCarta(sorteada) {
   div.innerHTML = `
     <div class="carta-miolo">
       <div class="face carta-verso"></div>
-      <div class="face frente">
-        <div class="frente-conteudo">
-          <span class="frente-numero">${carta.numero}</span>
-          <span class="frente-simbolo" aria-hidden="true">${carta.simbolo}</span>
-          <span class="frente-nome">${carta.nome}</span>
-        </div>
-      </div>
+      <div class="face frente"></div>
     </div>`;
+  div.querySelector(".frente").appendChild(frenteDaCarta(carta));
   return div;
 }
 
@@ -150,40 +100,12 @@ async function tirarCartas() {
     el.instrucao.textContent = `Revelando: ${POSICOES[i].nome}…`;
     elementos[i].carta.classList.add("virada");
     await esperar(PAUSA_ENTRE_VIRADAS);
-    elementos[i].estado.textContent = sorteadas[i].invertida ? "invertida" : "";
+    elementos[i].estado.textContent = sorteadas[i].carta.nome + (sorteadas[i].invertida ? " · invertida" : "");
   }
 
   el.instrucao.textContent = "2. As cartas foram lançadas";
   mostrarLeitura(assunto, el.pergunta.value.trim(), sorteadas);
   lendo = false;
-}
-
-// ---------- Interpretação ----------
-
-// Invertida, uma carta favorável perde força e uma neutra pesa;
-// cartas desafiadoras invertidas indicam libertação do problema.
-function tomEfetivo({ carta, invertida }) {
-  if (!invertida) return carta.tom;
-  return carta.tom === 0 ? -1 : 0;
-}
-
-function textoDaCarta({ carta, invertida }, assunto) {
-  if (!assunto.padrao) {
-    const sentido = invertida ? carta.invertida : carta.normal;
-    return `Em relação a “${escaparHtml(assunto.nome)}”, a carta fala de ${sentido}.`;
-  }
-  const doTema = carta.temas[assunto.id];
-  if (invertida) {
-    let complemento = "";
-    if (doTema) {
-      const area = assunto.nome.toLowerCase();
-      complemento = carta.tom < 0
-        ? ` Em ${area}, a sombra desta carta (${doTema}) começa a perder força.`
-        : ` Em ${area}, o lado luminoso desta carta (${doTema}) ainda encontra resistência.`;
-    }
-    return `Invertida, aponta ${carta.invertida}.${complemento}`;
-  }
-  return maiuscula(doTema || carta.normal) + ".";
 }
 
 function sintese(sorteadas, assunto) {
@@ -253,5 +175,5 @@ function reiniciar() {
 
 el.baralho.addEventListener("click", tirarCartas);
 el.novaLeitura.addEventListener("click", reiniciar);
-montarAssuntos();
 atualizarBaralho();
+})();

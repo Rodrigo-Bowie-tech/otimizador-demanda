@@ -120,7 +120,11 @@ function frenteDaCarta(carta) {
       document.getElementById(b.getAttribute("aria-controls")).hidden = !ativa;
     }
     if (focar) botao.focus();
-    history.replaceState(null, "", "#" + botao.dataset.aba);
+    try {
+      history.replaceState(null, "", "#" + botao.dataset.aba);
+    } catch {
+      // Alguns navegadores embutidos não deixam alterar o endereço; a aba abre do mesmo jeito.
+    }
   }
 
   botoes.forEach((botao, i) => {

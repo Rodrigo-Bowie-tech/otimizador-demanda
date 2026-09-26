@@ -1,4 +1,4 @@
-// Funções usadas pelas duas abas: utilidades, seletor de assunto, interpretação e abas.
+// Funções usadas pelas duas abas: utilidades, seletores, face da carta e abas.
 
 function escaparHtml(texto) {
   return texto.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -58,78 +58,49 @@ function criarSeletorAssunto(container, inputLivre, aoMudar) {
   };
 }
 
-// ---------- Interpretação ----------
-
-// Invertida, uma carta favorável perde força e uma neutra pesa;
-// cartas desafiadoras invertidas indicam libertação do problema.
-function tomEfetivo({ carta, invertida }) {
-  if (!invertida) return carta.tom;
-  return carta.tom === 0 ? -1 : 0;
+// Botões de estado de espírito (SENTIMENTOS); tocar de novo desmarca.
+// Retorna uma função que devolve o id marcado, ou null.
+function criarSeletorSentimento(container, aoMudar) {
+  let selecionado = null;
+  for (const sentimento of SENTIMENTOS) {
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.className = "assunto";
+    botao.setAttribute("role", "radio");
+    botao.setAttribute("aria-checked", "false");
+    botao.dataset.id = sentimento.id;
+    botao.textContent = sentimento.nome;
+    botao.addEventListener("click", () => {
+      selecionado = selecionado === sentimento.id ? null : sentimento.id;
+      for (const b of container.children) b.setAttribute("aria-checked", String(b.dataset.id === selecionado));
+      aoMudar();
+    });
+    container.appendChild(botao);
+  }
+  return () => selecionado;
 }
 
-// comGeral = false omite o significado geral invertido, para quem já o exibe à parte.
-function textoDaCarta({ carta, invertida }, assunto, comGeral = true) {
-  if (!assunto.padrao) {
-    const sentido = invertida ? carta.invertida : carta.normal;
-    return `Em relação a “${escaparHtml(assunto.nome)}”, a carta fala de ${sentido}.`;
+// Campo de nome que lembra o último nome digitado neste navegador e fica igual nas duas abas.
+const camposDeNome = [];
+function ligarCampoNome(input, aoMudar) {
+  camposDeNome.push({ input, aoMudar });
+  try {
+    input.value = localStorage.getItem("tarot-nome") || "";
+  } catch {
+    // Sem armazenamento disponível, o campo apenas começa vazio.
   }
-  const doTema = carta.temas[assunto.id];
-  if (invertida) {
-    let complemento = "";
-    if (doTema) {
-      const area = assunto.nome.toLowerCase();
-      complemento = carta.tom < 0
-        ? ` Em ${area}, a sombra desta carta (${doTema}) começa a perder força.`
-        : ` Em ${area}, o lado luminoso desta carta (${doTema}) ainda encontra resistência.`;
+  input.addEventListener("input", () => {
+    try {
+      localStorage.setItem("tarot-nome", input.value.trim());
+    } catch {
+      // Idem: não lembrar o nome não impede a leitura.
     }
-    return comGeral ? `Invertida, aponta ${carta.invertida}.${complemento}` : complemento.trim();
-  }
-  return maiuscula(doTema || carta.normal) + ".";
-}
-
-// Linha com o assunto e a pergunta, no topo da leitura.
-function contextoDaLeitura(assunto, pergunta) {
-  return `<p class="contexto">Assunto: <strong>${escaparHtml(assunto.nome)}</strong>` +
-    (pergunta ? ` · Pergunta: <em>${escaparHtml(pergunta)}</em>` : "") + "</p>";
-}
-
-// Resultado provável de uma tiragem de três cartas, na ordem Passado, Presente, Futuro.
-function sintese(sorteadas, assunto) {
-  // O futuro pesa mais por ser a tendência da questão.
-  const pesos = [1, 1, 1.5];
-  const pontos = sorteadas.reduce((soma, s, i) => soma + tomEfetivo(s) * pesos[i], 0);
-  const nomeAssunto = assunto.padrao ? assunto.nome.toLowerCase() : `“${escaparHtml(assunto.nome)}”`;
-
-  let tom, rotulo, texto;
-  if (pontos >= 1.5) {
-    tom = "favoravel";
-    rotulo = "Favorável";
-    texto = `As energias são positivas para ${nomeAssunto}. O caminho tende a se abrir, e as suas atitudes estão alinhadas com o que deseja. Aproveite o momento para agir.`;
-  } else if (pontos <= -1.5) {
-    tom = "desafiador";
-    rotulo = "Desafiador";
-    texto = `As cartas mostram obstáculos em ${nomeAssunto}. Não é um “não” definitivo, mas um alerta: há padrões a rever e decisões que pedem cautela antes de avançar.`;
-  } else {
-    tom = "equilibrado";
-    rotulo = "Em equilíbrio";
-    texto = `A situação em ${nomeAssunto} está em aberto, com forças que se equilibram. O resultado depende muito das escolhas que você fizer a partir de agora.`;
-  }
-
-  const trechos = sorteadas.map(({ carta, invertida }) => {
-    const palavra = carta.palavras[0];
-    if (!invertida) return palavra;
-    return carta.tom < 0 ? `superação de ${palavra}` : `${palavra} em desequilíbrio`;
+    for (const campo of camposDeNome) {
+      if (campo.input !== input) campo.input.value = input.value;
+      campo.aoMudar();
+    }
   });
-  const narrativa = `Você vem de um período marcado por <strong>${trechos[0]}</strong>, vive agora um momento de <strong>${trechos[1]}</strong> e caminha para <strong>${trechos[2]}</strong>.`;
-  const conselhoFinal = maiuscula(sorteadas[2].carta.conselho);
-
-  return `
-    <div class="sintese">
-      <h3>Resultado provável <span class="selo ${tom}">${rotulo}</span></h3>
-      <p>${narrativa}</p>
-      <p>${texto}</p>
-      <p><strong>Conselho final:</strong> ${conselhoFinal}.</p>
-    </div>`;
+  return () => input.value.trim();
 }
 
 // ---------- Face da carta ----------

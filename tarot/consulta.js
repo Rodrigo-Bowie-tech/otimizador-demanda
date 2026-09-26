@@ -23,6 +23,11 @@ const assuntoAtual = criarSeletorAssunto(
   document.getElementById("consulta-assunto-livre"),
   () => desenhar()
 );
+const nomeAtual = ligarCampoNome(document.getElementById("consulta-nome"), () => desenharSintese(assuntoAtual()));
+const sentimentoAtual = criarSeletorSentimento(
+  document.getElementById("consulta-sentimentos"),
+  () => desenharSintese(assuntoAtual())
+);
 
 // ---------- Galeria e busca ----------
 
@@ -136,7 +141,8 @@ function significado(s, assunto) {
     <p class="palavras">${carta.palavras.join(" · ")}</p>
     <p><strong>Significado geral${invertida ? " (invertida)" : ""}:</strong> ${geral}</p>
     ${doAssunto}
-    <p><strong>Conselho:</strong> ${maiuscula(carta.conselho)}.</p>`;
+    <p><strong>Conselho:</strong> ${maiuscula(carta.conselho)}.</p>
+    ${praticaDaCarta(s)}`;
 }
 
 function artigoVazio(i) {
@@ -186,7 +192,8 @@ function desenharSintese(assunto) {
   } else if (!assunto) {
     el.sintese.innerHTML = `<p class="nota">Escolha um assunto no passo 1 para ver o resultado combinado.</p>`;
   } else {
-    el.sintese.innerHTML = contextoDaLeitura(assunto, el.pergunta.value.trim()) + sintese(posicoes, assunto);
+    const ctx = { assunto, pergunta: el.pergunta.value.trim(), nome: nomeAtual(), sentimento: sentimentoAtual() };
+    el.sintese.innerHTML = aberturaDaLeitura(ctx) + sintese(posicoes, ctx);
   }
 }
 

@@ -23,6 +23,8 @@ const assuntoAtual = criarSeletorAssunto(
   document.getElementById("assunto-livre"),
   atualizarBaralho
 );
+const nomeAtual = ligarCampoNome(document.getElementById("nome"), () => {});
+const sentimentoAtual = criarSeletorSentimento(document.getElementById("sentimentos"), () => {});
 
 const esperar = (ms) => new Promise((resolver) => setTimeout(resolver, ms));
 
@@ -104,22 +106,27 @@ async function tirarCartas() {
   }
 
   el.instrucao.textContent = "2. As cartas foram lançadas";
-  mostrarLeitura(assunto, el.pergunta.value.trim(), sorteadas);
+  mostrarLeitura({
+    assunto,
+    pergunta: el.pergunta.value.trim(),
+    nome: nomeAtual(),
+    sentimento: sentimentoAtual()
+  }, sorteadas);
   lendo = false;
 }
 
-function mostrarLeitura(assunto, pergunta, sorteadas) {
-
+function mostrarLeitura(ctx, sorteadas) {
   const cartas = sorteadas.map((s, i) => `
     <article class="leitura-carta">
       <h3>${POSICOES[i].nome}: ${s.carta.nome}${s.invertida ? " (invertida)" : ""}
         <small>— ${POSICOES[i].descricao}</small></h3>
       <p class="palavras">${s.carta.palavras.join(" · ")}</p>
-      <p>${textoDaCarta(s, assunto)}</p>
+      <p>${textoDaCarta(s, ctx.assunto)}</p>
       <p><strong>Conselho:</strong> ${maiuscula(s.carta.conselho)}.</p>
+      ${praticaDaCarta(s)}
     </article>`).join("");
 
-  el.leitura.innerHTML = `${contextoDaLeitura(assunto, pergunta)}${cartas}${sintese(sorteadas, assunto)}`;
+  el.leitura.innerHTML = `${aberturaDaLeitura(ctx)}${cartas}${sintese(sorteadas, ctx)}`;
   el.resultado.hidden = false;
   el.resultado.scrollIntoView({ behavior: "smooth", block: "start" });
 }

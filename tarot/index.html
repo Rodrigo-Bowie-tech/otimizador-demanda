@@ -29,8 +29,17 @@
       <label class="campo">
         <span>Sua pergunta (opcional)</span>
         <input id="pergunta" type="text" maxlength="140"
-               placeholder="Ex.: O que preciso saber neste momento?">
+               placeholder="Ex.: Vou conseguir aquela vaga? Quando isso vai se resolver?">
       </label>
+      <label class="campo">
+        <span>Seu nome (opcional)</span>
+        <input id="nome" type="text" maxlength="40" autocomplete="given-name"
+               placeholder="Para a leitura falar diretamente com você">
+      </label>
+      <div class="campo">
+        <span>Como você chega a esta leitura? (opcional)</span>
+        <div id="sentimentos" class="assuntos" role="radiogroup" aria-label="Como você chega a esta leitura"></div>
+      </div>
     </section>
 
     <section class="painel mesa">
@@ -67,8 +76,17 @@
       <label class="campo">
         <span>Sua pergunta (opcional)</span>
         <input id="consulta-pergunta" type="text" maxlength="140"
-               placeholder="Ex.: O que preciso saber neste momento?">
+               placeholder="Ex.: Vou conseguir aquela vaga? Quando isso vai se resolver?">
       </label>
+      <label class="campo">
+        <span>Seu nome (opcional)</span>
+        <input id="consulta-nome" type="text" maxlength="40" autocomplete="given-name"
+               placeholder="Para a leitura falar diretamente com você">
+      </label>
+      <div class="campo">
+        <span>Como você chega a esta leitura? (opcional)</span>
+        <div id="consulta-sentimentos" class="assuntos" role="radiogroup" aria-label="Como você chega a esta leitura"></div>
+      </div>
       <p class="nota">Sem assunto, cada carta mostra seu significado em todos os assuntos, mas o resultado combinado só aparece com um assunto escolhido.</p>
     </section>
 
@@ -102,6 +120,7 @@
 
   <script src="cartas.js"></script>
   <script src="comum.js"></script>
+  <script src="interpretacao.js"></script>
   <script src="tiragem.js"></script>
   <script src="consulta.js"></script>
 </body>

@@ -38,7 +38,8 @@ Para servir localmente: `python -m http.server` dentro desta pasta.
 | `index.html` | Estrutura da página |
 | `style.css` | Visual, baralho e animação de virar as cartas |
 | `cartas.js` | Os 22 Arcanos Maiores, com significados gerais, invertidos e por assunto |
-| `comum.js` | Seletor de assunto, interpretação, resultado provável, face da carta e troca de abas |
+| `comum.js` | Seletores (assunto, estado de espírito, nome), face da carta e troca de abas |
+| `interpretacao.js` | Textos de aprofundamento e montagem da leitura personalizada |
 | `tiragem.js` | Aba "Tirar cartas": sorteio, animações e leitura |
 | `consulta.js` | Aba "Consultar cartas": busca, escolha das três cartas e leitura |
 | `imagens/` | Imagens das cartas: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons |
@@ -48,6 +49,17 @@ Para servir localmente: `python -m http.server` dentro desta pasta.
 - O sorteio usa `crypto.getRandomValues`; cada carta tem 50% de chance de sair invertida.
 - Assuntos padrão usam o texto específico da carta para aquele tema; assuntos digitados usam o
   significado geral da carta.
-- Se uma imagem não carregar, a carta é desenhada com número, símbolo e nome.
+- Cada carta traz também uma pergunta de reflexão e uma ação prática.
 - O resultado provável soma a energia de cada carta (favorável, neutra ou desafiadora; invertida
   muda o sinal), com peso maior para o Futuro.
+- A leitura combinada é personalizada com o que o usuário informa:
+  - **nome** e **estado de espírito** (ansiedade, esperança, dúvida…) mudam a abertura e o fecho;
+  - a **pergunta** é classificada (sim ou não, quando, por que, como, aberta) e recebe uma
+    resposta própria;
+  - o **assunto** define uma dica prática conforme o resultado.
+- "O que as cartas dizem juntas" aponta padrões da tiragem: trajetória do Passado ao Futuro,
+  cartas invertidas, sequência dos números, grupos temáticos repetidos e 20 combinações clássicas
+  de cartas (ex.: Torre + Estrela).
+- O ritmo (semanas, meses, prazo longo) vem da carta do Futuro.
+- O nome fica guardado só no navegador de quem usa (`localStorage`).
+- Se uma imagem não carregar, a carta é desenhada com número, símbolo e nome.

@@ -40,6 +40,15 @@ Aplicativo web estático (HTML, CSS e JavaScript puro, sem dependências) com tr
 
 Para servir localmente: `python -m http.server` dentro desta pasta.
 
+## Instalar no celular
+
+Publicado num endereço `https` (por exemplo, GitHub Pages), o site pode ser instalado como aplicativo e funciona sem internet depois da primeira abertura:
+
+- **Android (Chrome):** toque em **📲 Instalar app** no topo da página, ou no menu ⋮ → **Instalar app**.
+- **iPhone (Safari):** toque em **📲 Instalar app** para ver o passo a passo: **Compartilhar** → **Adicionar à Tela de Início**.
+
+Ao alterar qualquer arquivo do app, aumente `VERSAO` em `sw.js` para os celulares baixarem a versão nova. Aberto direto do arquivo (`file://`), o app funciona normalmente, só não fica disponível offline.
+
 ## Organização
 
 | Arquivo | Função |
@@ -52,6 +61,10 @@ Para servir localmente: `python -m http.server` dentro desta pasta.
 | `tiragem.js` | Aba "Tirar cartas": sorteio, animações e leitura |
 | `consulta.js` | Aba "Consultar tiragem": escolha das três cartas e leitura |
 | `glossario.js` | Aba "Glossário": significado individual de cada carta |
+| `instalar.js` | Registro do service worker e botão/instruções de instalação no celular |
+| `sw.js` | Service worker: guarda o app para abrir sem internet |
+| `manifest.webmanifest` | Nome, cores e ícones do app instalado |
+| `icones/` | Ícones do app (`icone.svg` é a arte original) |
 | `imagens/` | Imagens das cartas: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons |
 
 ## Como a leitura é montada

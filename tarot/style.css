@@ -447,3 +447,10 @@ footer { text-align: center; color: var(--texto-suave); font-size: 0.8rem; paddi
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---------- Instalação como app ---------- */
+
+.instalar { margin-top: 12px; }
+.instalar-dica { max-width: 560px; width: calc(100% - 32px); margin: 8px auto 0; }
+.instalar-dica ol { margin: 0 0 8px; padding-left: 20px; line-height: 1.6; }
+.instalar-dica .botao-secundario { margin-top: 12px; }

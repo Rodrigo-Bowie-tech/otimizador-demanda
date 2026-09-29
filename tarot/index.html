@@ -4,13 +4,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tarot das Três Cartas</title>
+  <meta name="theme-color" content="#140f24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Tarot">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header>
     <h1>✦ Tarot das Três Cartas ✦</h1>
     <p class="subtitulo">Leitura · Consulta · Glossário dos Arcanos</p>
+    <button id="instalar" type="button" class="botao-secundario instalar" hidden>📲 Instalar app</button>
   </header>
+
+  <aside id="instalar-dica" class="painel instalar-dica" hidden>
+    <h2>Instalar no iPhone</h2>
+    <ol>
+      <li>Abra esta página no <strong>Safari</strong>.</li>
+      <li>Toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima).</li>
+      <li>Escolha <strong>Adicionar à Tela de Início</strong> e toque em <strong>Adicionar</strong>.</li>
+    </ol>
+    <p class="nota">O Tarot aparece como um app na tela do celular e funciona mesmo sem internet.</p>
+    <button id="instalar-fechar" type="button" class="botao-secundario">Entendi</button>
+  </aside>
 
   <nav class="abas" role="tablist" aria-label="Seções">
     <button type="button" role="tab" id="aba-tiragem" data-aba="tirar" aria-controls="painel-tiragem">🃏 Tirar cartas</button>
@@ -141,5 +160,6 @@
   <script src="tiragem.js"></script>
   <script src="consulta.js"></script>
   <script src="glossario.js"></script>
+  <script src="instalar.js"></script>
 </body>
 </html>

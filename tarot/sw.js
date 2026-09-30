@@ -1,6 +1,6 @@
 // Service worker: guarda o app no celular para abrir mesmo sem internet.
 // Ao mudar qualquer arquivo do app, aumente VERSAO para os celulares baixarem a nova versão.
-const VERSAO = "tarot-v1";
+const VERSAO = "tarot-v2";
 
 const ARQUIVOS = [
   "./",
@@ -24,7 +24,10 @@ const ARQUIVOS = [
 
 self.addEventListener("install", (evento) => {
   evento.waitUntil(
-    caches.open(VERSAO).then((cache) => cache.addAll(ARQUIVOS)).then(() => self.skipWaiting())
+    // "reload" busca cada arquivo direto do site, sem reaproveitar cópias antigas do navegador.
+    caches.open(VERSAO)
+      .then((cache) => cache.addAll(ARQUIVOS.map((arquivo) => new Request(arquivo, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
   );
 });
 

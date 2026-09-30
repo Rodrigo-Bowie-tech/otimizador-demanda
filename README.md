@@ -33,3 +33,7 @@ Gera `dist/OtimizadorDemanda.zip`, com um Python portátil incluso. Instruções
 ## Pendências
 
 - Calibrar `leitor_pdf.py` com contas reais de cada distribuidora.
+
+## Outros projetos neste repositório
+
+- [`tarot/`](tarot/README.md): Tarot das Três Cartas, aplicativo web estático de leitura de tarot.

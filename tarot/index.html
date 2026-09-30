@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tarot das Três Cartas</title>
+  <meta name="theme-color" content="#2d1659">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Tarot">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>✦ Tarot das Três Cartas ✦</h1>
+    <p class="subtitulo">Leitura · Consulta · Glossário dos Arcanos</p>
+    <button id="instalar" type="button" class="botao-secundario instalar" hidden>📲 Instalar app</button>
+  </header>
+
+  <aside id="instalar-dica" class="painel instalar-dica" hidden>
+    <h2>Instalar no iPhone</h2>
+    <ol>
+      <li>Abra esta página no <strong>Safari</strong>.</li>
+      <li>Toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima).</li>
+      <li>Escolha <strong>Adicionar à Tela de Início</strong> e toque em <strong>Adicionar</strong>.</li>
+    </ol>
+    <p class="nota">O Tarot aparece como um app na tela do celular e funciona mesmo sem internet.</p>
+    <button id="instalar-fechar" type="button" class="botao-secundario">Entendi</button>
+  </aside>
+
+  <nav class="abas" role="tablist" aria-label="Seções">
+    <button type="button" role="tab" id="aba-tiragem" data-aba="tirar" aria-controls="painel-tiragem">🃏 Tirar cartas</button>
+    <button type="button" role="tab" id="aba-consulta" data-aba="consultar" aria-controls="painel-consulta">🔎 Consultar tiragem</button>
+    <button type="button" role="tab" id="aba-glossario" data-aba="glossario" aria-controls="painel-glossario">📖 Glossário</button>
+  </nav>
+
+  <main id="painel-tiragem" role="tabpanel" aria-labelledby="aba-tiragem">
+    <section id="etapa-assunto" class="painel">
+      <h2>1. Sobre o que você quer conselho?</h2>
+      <div id="assuntos" class="assuntos" role="radiogroup" aria-label="Assunto"></div>
+      <label class="campo">
+        <span>Ou escreva seu próprio assunto</span>
+        <input id="assunto-livre" type="text" maxlength="80"
+               placeholder="Ex.: minha mudança de cidade, um concurso, uma viagem…">
+      </label>
+      <label class="campo">
+        <span>Sua pergunta (opcional)</span>
+        <input id="pergunta" type="text" maxlength="140"
+               placeholder="Ex.: Vou conseguir aquela vaga? Quando isso vai se resolver?">
+      </label>
+      <label class="campo">
+        <span>Seu nome (opcional)</span>
+        <input id="nome" type="text" maxlength="40" autocomplete="given-name"
+               placeholder="Para a leitura falar diretamente com você">
+      </label>
+      <div class="campo">
+        <span>Como você chega a esta leitura? (opcional)</span>
+        <div id="sentimentos" class="assuntos" role="radiogroup" aria-label="Como você chega a esta leitura"></div>
+      </div>
+    </section>
+
+    <section class="painel mesa">
+      <h2 id="instrucao">2. Escolha um assunto para liberar o baralho</h2>
+
+      <button id="baralho" class="baralho" type="button" disabled
+              aria-label="Embaralhar e tirar três cartas">
+        <span class="carta-verso"></span>
+        <span class="carta-verso"></span>
+        <span class="carta-verso"></span>
+        <span class="carta-verso"></span>
+        <span class="carta-verso topo"><span class="dica">Toque para tirar</span></span>
+      </button>
+
+      <div id="tiragem" class="tiragem"></div>
+    </section>
+
+    <section id="resultado" class="painel resultado" hidden>
+      <h2>3. Sua leitura</h2>
+      <div id="leitura"></div>
+      <button id="nova-leitura" class="botao" type="button">Nova leitura</button>
+    </section>
+  </main>
+
+  <main id="painel-consulta" role="tabpanel" aria-labelledby="aba-consulta" hidden>
+    <section class="painel">
+      <h2>1. Assunto da consulta</h2>
+      <div id="consulta-assuntos" class="assuntos" role="radiogroup" aria-label="Assunto"></div>
+      <label class="campo">
+        <span>Ou escreva seu próprio assunto</span>
+        <input id="consulta-assunto-livre" type="text" maxlength="80"
+               placeholder="Ex.: minha mudança de cidade, um concurso, uma viagem…">
+      </label>
+      <label class="campo">
+        <span>Sua pergunta (opcional)</span>
+        <input id="consulta-pergunta" type="text" maxlength="140"
+               placeholder="Ex.: Vou conseguir aquela vaga? Quando isso vai se resolver?">
+      </label>
+      <label class="campo">
+        <span>Seu nome (opcional)</span>
+        <input id="consulta-nome" type="text" maxlength="40" autocomplete="given-name"
+               placeholder="Para a leitura falar diretamente com você">
+      </label>
+      <div class="campo">
+        <span>Como você chega a esta leitura? (opcional)</span>
+        <div id="consulta-sentimentos" class="assuntos" role="radiogroup" aria-label="Como você chega a esta leitura"></div>
+      </div>
+      <p class="nota">Sem assunto, cada carta mostra seu significado em todos os assuntos, mas o resultado combinado só aparece com um assunto escolhido.</p>
+    </section>
+
+    <section class="painel">
+      <h2>2. Escolha três cartas</h2>
+      <p class="nota">A primeira carta escolhida é o Passado, a segunda o Presente e a terceira o Futuro.</p>
+      <label class="campo">
+        <span>Buscar por nome, número ou palavra-chave</span>
+        <input id="busca" type="search" placeholder="Ex.: estrela, 13, coragem…">
+      </label>
+      <p id="busca-contagem" class="nota" aria-live="polite"></p>
+      <p id="consulta-progresso" class="progresso" aria-live="polite"></p>
+      <div id="galeria" class="galeria"></div>
+      <p id="galeria-vazia" class="nota" hidden>Nenhuma carta encontrada.</p>
+    </section>
+
+    <section id="consulta-resultado" class="painel" hidden>
+      <div class="consulta-cabecalho">
+        <h2>3. Sua leitura</h2>
+        <button id="consulta-limpar" type="button" class="botao-secundario">Limpar seleção</button>
+      </div>
+      <div id="consulta-lista"></div>
+      <div id="consulta-sintese"></div>
+    </section>
+  </main>
+
+  <main id="painel-glossario" role="tabpanel" aria-labelledby="aba-glossario" hidden>
+    <section class="painel">
+      <h2>Glossário dos Arcanos Maiores</h2>
+      <p class="nota">Digite o nome da carta ou toque na imagem para ver o significado dela sozinha.</p>
+      <label class="campo">
+        <span>Buscar por nome, número ou palavra-chave</span>
+        <input id="glossario-busca" type="search" placeholder="Ex.: morte, XVII, esperança…">
+      </label>
+      <p id="glossario-contagem" class="nota" aria-live="polite"></p>
+      <div id="glossario-galeria" class="galeria"></div>
+      <p id="glossario-vazia" class="nota" hidden>Nenhuma carta encontrada.</p>
+    </section>
+
+    <section id="glossario-detalhe" class="painel" hidden aria-live="polite"></section>
+  </main>
+
+  <footer>
+    As leituras são geradas para fins de entretenimento e reflexão.<br>
+    Imagens: baralho Rider-Waite-Smith (1909), domínio público, via Wikimedia Commons.
+  </footer>
+
+  <script src="cartas.js"></script>
+  <script src="comum.js"></script>
+  <script src="interpretacao.js"></script>
+  <script src="tiragem.js"></script>
+  <script src="consulta.js"></script>
+  <script src="glossario.js"></script>
+  <script src="instalar.js"></script>
+</body>
+</html>

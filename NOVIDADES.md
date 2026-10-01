@@ -1,5 +1,13 @@
 # Novidades
 
+## 2.1.0
+
+- Lê as faturas agrupadas da Light, com várias unidades consumidoras no mesmo PDF.
+- Demanda contratada, demanda medida (com a perda de transformação, quando houver) e tarifas
+  de demanda são preenchidas a partir da conta.
+- Com várias unidades, o resultado mostra um resumo de todas, da que mais economiza para a que
+  menos, e o relatório em Excel ganha a aba "Todas as unidades".
+
 ## 2.0.0
 
 - Agora é um app que se instala no celular (Android e iPhone) e no computador, direto pelo navegador.

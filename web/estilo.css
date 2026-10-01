@@ -135,3 +135,19 @@ tr.com-multa td { background: #fdecdf; }
 .abas { display: flex; gap: 6px; border-bottom: 1px solid var(--borda); margin-bottom: 8px; }
 .abas button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; }
 .abas button[aria-selected="true"] { border-bottom-color: var(--verde); font-weight: 600; color: var(--verde); }
+
+/* Várias unidades consumidoras */
+.destaque-campo { background: var(--azul-claro); border-radius: var(--raio); padding: 12px 14px; }
+.destaque-campo select { display: block; width: 100%; margin-top: 6px; background: var(--cartao); }
+table.resumo td { white-space: normal; vertical-align: middle; }
+table.resumo td:first-child { min-width: 180px; }
+tr.selecionada, tr.selecionada td { background: var(--verde-claro); }
+@media (max-width: 560px) {
+  /* No celular, cada unidade do resumo vira um cartão, sem rolagem lateral */
+  table.resumo thead { display: none; }
+  table.resumo tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; border-bottom: 1px solid var(--borda); }
+  table.resumo td { border: 0; padding: 0; min-width: 0; background: none !important; }
+  table.resumo td:first-child { grid-column: 1 / -1; font-weight: 600; }
+  table.resumo td:nth-child(3), table.resumo td:nth-child(5) { text-align: right; }
+  table.resumo td:nth-child(4) { font-weight: 600; color: var(--verde); }
+}

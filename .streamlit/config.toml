@@ -1,6 +1,5 @@
 [server]
 headless = true
-address = "localhost"
 maxUploadSize = 50
 
 [browser]

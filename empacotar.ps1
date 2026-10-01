@@ -1,5 +1,7 @@
 # Gera dist\OtimizadorDemanda.zip: o programa + um Python portátil, pronto para
-# entregar a quem não programa. Rode de novo sempre que alterar o programa.
+# entregar a quem não programa. Gera também dist\atualizacao.zip, só com o programa,
+# que as cópias já instaladas baixam sozinhas ao abrir.
+# O GitHub roda este script ao publicar uma versão nova (.github/workflows/publicar.yml).
 #
 #   powershell -ExecutionPolicy Bypass -File empacotar.ps1
 
@@ -9,6 +11,7 @@ $VersaoPython = "3.12.10"               # mesma versão do Python usado no desen
 $Build = Join-Path $env:TEMP "od_build"  # caminho curto: evita o limite de 260 caracteres do Windows
 $Pasta = Join-Path $Build "OtimizadorDemanda"
 $Zip = Join-Path $Projeto "dist\OtimizadorDemanda.zip"
+$ZipAtualizacao = Join-Path $Projeto "dist\atualizacao.zip"
 
 Write-Host "1/5 Preparando pastas..."
 if (Test-Path $Build) { Remove-Item $Build -Recurse -Force }
@@ -30,7 +33,8 @@ Get-ChildItem "$Pasta\python\Lib\site-packages" -Recurse -Directory -Filter test
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Host "4/5 Copiando o programa..."
-foreach ($arquivo in "app.py", "calculo.py", "graficos.py", "leitor_pdf.py", "relatorio.py", "iniciar.py") {
+foreach ($arquivo in "app.py", "calculo.py", "graficos.py", "leitor_pdf.py", "relatorio.py", "iniciar.py",
+                    "VERSAO", "requirements.txt") {
     Copy-Item (Join-Path $Projeto $arquivo) "$Pasta\app\"
 }
 Copy-Item "$Projeto\.streamlit\config.toml" "$Pasta\app\.streamlit\"
@@ -40,9 +44,11 @@ $Atalho = "Abrir Otimizador de Demanda.bat"
 (Get-Content "$Projeto\pacote\$Atalho") -join "`r`n" | Set-Content "$Pasta\$Atalho" -Encoding ascii
 
 Write-Host "5/5 Compactando..."
-if (Test-Path $Zip) { Remove-Item $Zip }
+foreach ($z in $Zip, $ZipAtualizacao) { if (Test-Path $z) { Remove-Item $z } }
 python -c "import shutil, sys; shutil.make_archive(sys.argv[1][:-4], 'zip', sys.argv[2], 'OtimizadorDemanda')" $Zip $Build
 if ($LASTEXITCODE -ne 0) { throw "Falha ao compactar." }
+python -c "import shutil, sys; shutil.make_archive(sys.argv[1][:-4], 'zip', sys.argv[2])" $ZipAtualizacao "$Pasta\app"
+if ($LASTEXITCODE -ne 0) { throw "Falha ao compactar a atualizacao." }
 
 $Tamanho = [math]::Round((Get-Item $Zip).Length / 1MB)
 Write-Host "`nPronto: $Zip ($Tamanho MB)"

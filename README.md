@@ -25,11 +25,10 @@ O código do app fica em `web/` (JavaScript, sem etapa de compilação). Para te
 O GitHub Actions (`.github/workflows/site.yml`) publica o app no GitHub Pages, e os aparelhos com o
 app instalado baixam a versão nova sozinhos.
 
-## Versão em Python (Windows)
+## Versão em Python (arquivada)
 
-A primeira versão, em Python + Streamlit, continua na raiz do repositório (`app.py` e demais `.py`).
-`.github/workflows/publicar.yml` gera dela um pacote portátil para Windows a cada mudança em `VERSAO`.
-Para rodar: `python -m pip install -r requirements.txt` e `python -m streamlit run app.py`.
+A primeira versão, em Python + Streamlit, fica em `versao-python/` só para consulta.
+Veja `versao-python/README.md`.
 
 ## Organização
 
@@ -37,15 +36,14 @@ Para rodar: `python -m pip install -r requirements.txt` e `python -m streamlit r
 |---|---|
 | `web/` | App instalável (PWA): mesmas regras e telas, em JavaScript |
 | `web/sw.js` | Guarda o app para uso sem internet e instala as versões novas |
-| `app.py` | Interface web em 3 etapas (Streamlit) |
-| `calculo.py` | Regras de faturamento e busca da demanda ótima |
-| `leitor_pdf.py` | Extração dos dados das contas em PDF |
-| `graficos.py` | Gráficos da tela de resultado |
-| `relatorio.py` | Relatório em Excel |
-| `iniciar.py` | Atualiza e abre o programa no navegador (usado pelo atalho do pacote) |
-| `empacotar.ps1` | Gera o pacote para Windows e o arquivo de atualização |
+| `web/app.js` | Telas do app em 3 etapas |
+| `web/calculo.js` | Regras de faturamento e busca da demanda ótima |
+| `web/leitor_pdf.js` | Extração dos dados das contas em PDF |
+| `web/graficos.js` | Gráficos da tela de resultado |
+| `web/relatorio.js` | Relatório em Excel |
 | `VERSAO`, `NOVIDADES.md` | Versão atual e histórico de mudanças |
+| `versao-python/` | Versão antiga em Python (arquivada) |
 
 ## Pendências
 
-- Calibrar `web/leitor_pdf.js` (e `leitor_pdf.py`) com contas reais de cada distribuidora.
+- Calibrar `web/leitor_pdf.js` com contas reais de cada distribuidora.

@@ -7,6 +7,7 @@
 - Funciona sem internet depois de instalado.
 - As contas continuam sendo lidas no próprio aparelho, sem envio para a internet.
 - Cores dos gráficos ajustadas para pessoas com daltonismo.
+- A versão antiga em Python foi guardada na pasta `versao-python/`, só para consulta.
 
 ## 1.1.0
 

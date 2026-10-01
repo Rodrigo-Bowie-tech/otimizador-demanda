@@ -1,5 +1,13 @@
 # Novidades
 
+## 2.0.0
+
+- Agora é um app que se instala no celular (Android e iPhone) e no computador, direto pelo navegador.
+- Atualiza sozinho: sempre que há internet, o app baixa a versão nova.
+- Funciona sem internet depois de instalado.
+- As contas continuam sendo lidas no próprio aparelho, sem envio para a internet.
+- Cores dos gráficos ajustadas para pessoas com daltonismo.
+
 ## 1.1.0
 
 - O programa agora se atualiza sozinho: ao abrir, ele procura uma versão nova e a instala.

@@ -1,0 +1,42 @@
+# Publica o app (pasta web/) no GitHub Pages a cada envio ao branch main.
+# Celulares e computadores com o app instalado baixam a versão nova sozinhos.
+name: Publicar app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Marcar a versão
+        run: |
+          versao=$(tr -d '[:space:]' < VERSAO)
+          sed -i "s/__VERSAO__/$versao/g" web/versao.js
+          # Muda a cada publicação: é o que faz os aparelhos baixarem a versão nova
+          sed -i "s/__BUILD__/$versao-${GITHUB_SHA::7}/g" web/sw.js
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+      - id: publicacao
+        uses: actions/deploy-pages@v4

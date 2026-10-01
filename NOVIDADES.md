@@ -1,5 +1,13 @@
 # Novidades
 
+## 2.3.0
+
+- O app agora diz se vale a pena trocar de modalidade tarifária (verde x azul): compara o custo de
+  demanda + energia de cada modalidade, cada uma com a demanda contratada ideal.
+- Consumos de energia (kWh) na ponta e fora de ponta e as tarifas de energia de cada modalidade são
+  lidos das faturas da Light; as tarifas podem ser conferidas e completadas na etapa 2.
+- Resultado, resumo de todas as unidades, PDF e Excel mostram a modalidade recomendada.
+
 ## 2.2.0
 
 - Relatório em PDF com estrutura de relatório técnico: capa, introdução, metodologia e premissas,

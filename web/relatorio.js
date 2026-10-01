@@ -64,6 +64,14 @@ function nomeDeAba(wb, desejado) {
 
 const reais = (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
+/** Demanda contratada recomendada, em texto, na modalidade recomendada. */
+function textoContratos(analise) {
+  const postos = analise.trocar
+    ? Object.entries(analise.comparacao.opcoes[analise.comparacao.melhor].postos).map(([posto, p]) => [posto, p.contratada])
+    : Object.entries(analise.resultados).map(([posto, r]) => [posto, r.otima]);
+  return postos.map(([posto, valor]) => `${postos.length > 1 ? `${posto}: ` : ""}${valor.toLocaleString("pt-BR")} kW`).join("; ");
+}
+
 /**
  * itens: [{unidade, analise}] de todas as unidades (analise null = dados incompletos).
  * imagens: resultado de imagensDosRelatorios. meta: {crescimento, distribuidoras}.
@@ -96,6 +104,35 @@ export async function gerarExcel(itens, imagens, meta) {
     linha++;
   }
 
+  // Recomendação por unidade: modalidade e demanda (demanda + energia quando há comparação)
+  linha++;
+  aba.getCell(linha, 1).value = "Recomendação por unidade";
+  aba.getCell(linha, 1).font = SECAO;
+  cabecalho(aba, ++linha, ["Unidade consumidora", "Modalidade atual", "Modalidade recomendada", "Demanda contratada recomendada",
+    "Custo atual (demanda + energia)", "Custo recomendado (demanda + energia)", "Economia estimada no período", "Base da economia"]);
+  for (const { unidade, analise } of itens) {
+    if (!analise) {
+      escrever(aba, ++linha, [unidade.rotulo, unidade.modalidade, "Dados incompletos"]);
+      continue;
+    }
+    const comp = analise.comparacao;
+    const contratos = textoContratos(analise);
+    const custos = comp?.disponivel
+      ? [comp.atual.total, comp.atual.total - analise.economia]
+      : [null, null];
+    escrever(aba, ++linha, [unidade.rotulo, unidade.modalidade, analise.modalidadeRecomendada, contratos, ...custos, analise.economia,
+      analise.trocar ? "Troca de modalidade + demanda" : "Ajuste de demanda"], [null, null, null, null, MOEDA, MOEDA, MOEDA]);
+    if (analise.trocar) aba.getCell(linha, 3).font = { bold: true, color: { argb: "FF2E7D4F" } };
+  }
+  linha++;
+  aba.getCell(linha, 1).value = "Total";
+  aba.getCell(linha, 1).font = NEGRITO;
+  escrever(aba, linha, [completos.reduce((s, i) => s + i.analise.economia, 0)], [MOEDA], 7);
+  aba.getCell(linha, 7).font = NEGRITO;
+
+  linha += 2;
+  aba.getCell(linha, 1).value = "Ajuste de demanda mantendo a modalidade atual";
+  aba.getCell(linha, 1).font = SECAO;
   linha++;
   cabecalho(aba, linha, ["Unidade consumidora", "Modalidade", "Posto", "Contratada atual", "Recomendada",
     "Custo atual no período", "Custo com a recomendada", "Economia estimada", "Multas de ultrapassagem hoje", "Meses"]);
@@ -125,6 +162,7 @@ export async function gerarExcel(itens, imagens, meta) {
     "Demanda faturada = maior valor entre a contratada e a medida (REN ANEEL 1000/2021).",
     "Se a medida passar de 105% da contratada, o excesso é cobrado em dobro (ultrapassagem).",
     "A demanda recomendada é a que resulta no menor custo total no período analisado.",
+    "Modalidade: compara o custo de demanda + energia na verde e na azul, cada uma com a demanda ideal, usando os consumos (kWh) e as tarifas com tributos.",
     "Custos consideram apenas a parcela de demanda da conta, com a tarifa com tributos da conta mais recente.",
     "Antes de pedir a alteração, confirme com a distribuidora os prazos e condições do contrato.",
     "O detalhe mês a mês e os gráficos de cada unidade estão nas abas seguintes.",
@@ -148,6 +186,33 @@ export async function gerarExcel(itens, imagens, meta) {
       ? `ponta R$ ${unidade.tarifa_p.toLocaleString("pt-BR")}/kW, fora de ponta R$ ${unidade.tarifa.toLocaleString("pt-BR")}/kW`
       : `R$ ${unidade.tarifa.toLocaleString("pt-BR")}/kW`}`;
     let l = 4;
+    // Modalidade tarifária: situação atual x verde x azul
+    const comp = analise.comparacao;
+    if (comp?.disponivel) {
+      det.getCell(l, 1).value = "Modalidade tarifária";
+      det.getCell(l, 1).font = SECAO;
+      escrever(det, ++l, [analise.trocar
+        ? `Recomendação: trocar para a tarifa ${comp.melhor} (economia de ${reais(comp.economia)} no período, demanda + energia).`
+        : `Recomendação: manter a tarifa ${unidade.modalidade}.`]);
+      cabecalho(det, ++l, ["Opção", "Demanda contratada", "Custo de demanda", "Custo de energia", "Total no período"]);
+      const opcoes = [[`Hoje (${unidade.modalidade})`, "contratos atuais", comp.atual],
+        ...Object.entries(comp.opcoes).map(([m, v]) => [`${m} com a demanda ideal`,
+          Object.entries(v.postos).map(([posto, p]) => `${Object.keys(v.postos).length > 1 ? `${posto}: ` : ""}${p.contratada} kW`).join("; "), v])];
+      for (const [nome, contratos, v] of opcoes) {
+        escrever(det, ++l, [nome, contratos, v.custoDemanda, v.custoEnergia, v.total], [null, null, MOEDA, MOEDA, MOEDA]);
+        if (nome.startsWith(comp.melhor)) for (let c = 1; c <= 5; c++) det.getCell(l, c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F4EA" } };
+      }
+      if (comp.pontaEstimada && comp.opcoes.Azul) {
+        det.getCell(++l, 1).value = "Azul simulada com a demanda na ponta igual à demanda máxima do mês (a verde não mede a ponta separadamente).";
+        det.getCell(l, 1).font = { italic: true, color: { argb: "FF5F6368" } };
+      }
+      const figura = imagens.unidades[indice]?.modalidade;
+      if (figura) inserirImagem(wb, det, figura, 8, 3);
+      l = Math.max(l + 3, 4 + LINHAS_POR_IMAGEM + 2);
+      det.getCell(l, 1).value = analise.trocar ? `Ajuste de demanda mantendo a tarifa ${unidade.modalidade}` : "Ajuste de demanda";
+      det.getCell(l, 1).font = { bold: true, size: 14 };
+      l += 2;
+    }
     for (const [indicePosto, [posto, r]] of postos.entries()) {
       const inicio = l;
       det.getCell(l, 1).value = postos.length > 1 ? `Posto: ${posto}` : "Demanda";

@@ -201,7 +201,8 @@ export async function imagem(figura, largura = 1000, altura = 480) {
  */
 export async function imagensDosRelatorios(itens, aoProgredir = () => {}) {
   const completos = itens.filter((i) => i.analise);
-  const total = completos.reduce((n, i) => n + Object.keys(i.analise.resultados).length * 3, 0) + (itens.length > 1 ? 1 : 0);
+  const total = completos.reduce((n, i) => n + Object.keys(i.analise.resultados).length * 3 + (i.analise.comparacao?.disponivel ? 1 : 0), 0)
+    + (itens.length > 1 ? 1 : 0);
   let feitas = 0;
   const gerar = async (figura, largura, altura) => {
     const png = await imagem(figura, largura, altura);
@@ -220,6 +221,7 @@ export async function imagensDosRelatorios(itens, aoProgredir = () => {}) {
         custo: await gerar(figCustoPorMes(analise.meses, r, { exportar: true, titulo: `Custo de demanda por mês: atual x recomendada${sufixo}` })),
       };
     }
+    if (analise.comparacao?.disponivel) porPosto.modalidade = await gerar(figComparacaoModalidades(analise.comparacao, { exportar: true }));
     unidades.push(porPosto);
   }
   let economia = null;
@@ -228,4 +230,32 @@ export async function imagensDosRelatorios(itens, aoProgredir = () => {}) {
     economia = await gerar(figEconomiaPorUnidade(dados, { exportar: true }), 1000, Math.max(320, 70 * dados.length + 120));
   }
   return { economia, unidades };
+}
+
+/** Custo do período (demanda + energia): situação atual x cada modalidade com a demanda ideal. */
+export function figComparacaoModalidades(comp, { exportar = false, titulo = "Custo no período por modalidade: demanda + energia" } = {}) {
+  const nomes = [`Hoje (${comp.atual.modalidade}, contratos atuais)`, ...Object.keys(comp.opcoes).map((m) => `${m} com a demanda ideal`)];
+  const valores = [comp.atual, ...Object.values(comp.opcoes)];
+  const melhor = 1 + Object.keys(comp.opcoes).indexOf(comp.melhor);
+  const cor = (escura, clara) => valores.map((_, i) => (i === melhor ? (escura ? VERDE : "#9fd4b4") : escura ? AZUL : "#b4c8ee"));
+  const barras = (nome, campo, escura) => ({
+    x: nomes, y: valores.map((v) => v[campo]), name: nome, type: "bar", marker: { color: cor(escura) },
+    hovertemplate: `%{x}<br>${nome}: R$ %{y:,.2f}<extra></extra>`,
+  });
+  return {
+    data: [
+      barras("Demanda", "custoDemanda", true),
+      barras("Energia", "custoEnergia", false),
+      {
+        x: nomes, y: valores.map((v) => v.total), type: "scatter", mode: "text", showlegend: false, hoverinfo: "skip",
+        text: valores.map((v, i) => `<b>${reais(v.total)}</b>${i === melhor ? "<br>mais barata" : ""}`),
+        textposition: "top center", textfont: { color: valores.map((_, i) => (i === melhor ? VERDE : TINTA)), size: exportar ? 14 : 13 },
+      },
+    ],
+    layout: layoutBase({
+      titulo, exportar, barmode: "stack", bargap: 0.45,
+      eixoY: { title: { text: "R$" }, tickprefix: "R$ ", tickformat: ",.0f", rangemode: "tozero" },
+      margin: { t: exportar ? 70 : 30, r: 16, b: 10, l: 10 },
+    }),
+  };
 }

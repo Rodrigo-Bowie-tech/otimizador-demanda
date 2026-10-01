@@ -109,7 +109,8 @@ export async function gerarExcel(itens, imagens, meta) {
   aba.getCell(linha, 1).value = "Recomendação por unidade";
   aba.getCell(linha, 1).font = SECAO;
   cabecalho(aba, ++linha, ["Unidade consumidora", "Modalidade atual", "Modalidade recomendada", "Demanda contratada recomendada",
-    "Custo atual (demanda + energia)", "Custo recomendado (demanda + energia)", "Economia estimada no período", "Base da economia"]);
+    "Custo atual (demanda + energia)", "Custo recomendado (demanda + energia)", "Economia estimada no período", "Base da economia",
+    "Distribuidora"]);
   for (const { unidade, analise } of itens) {
     if (!analise) {
       escrever(aba, ++linha, [unidade.rotulo, unidade.modalidade, "Dados incompletos"]);
@@ -121,7 +122,8 @@ export async function gerarExcel(itens, imagens, meta) {
       ? [comp.atual.total, comp.atual.total - analise.economia]
       : [null, null];
     escrever(aba, ++linha, [unidade.rotulo, unidade.modalidade, analise.modalidadeRecomendada, contratos, ...custos, analise.economia,
-      analise.trocar ? "Troca de modalidade + demanda" : "Ajuste de demanda"], [null, null, null, null, MOEDA, MOEDA, MOEDA]);
+      analise.trocar ? "Troca de modalidade + demanda" : "Ajuste de demanda", unidade.distribuidora ?? ""],
+    [null, null, null, null, MOEDA, MOEDA, MOEDA]);
     if (analise.trocar) aba.getCell(linha, 3).font = { bold: true, color: { argb: "FF2E7D4F" } };
   }
   linha++;
@@ -165,6 +167,8 @@ export async function gerarExcel(itens, imagens, meta) {
     "Modalidade: compara o custo de demanda + energia na verde e na azul, cada uma com a demanda ideal, usando os consumos (kWh) e as tarifas com tributos.",
     "Custos consideram apenas a parcela de demanda da conta, com a tarifa com tributos da conta mais recente.",
     "Antes de pedir a alteração, confirme com a distribuidora os prazos e condições do contrato.",
+    "Modalidade: tarifas sem tributos da distribuidora com os tributos de cada unidade (lidos da própria conta).",
+    "Meses marcados como histórico vêm do histórico impresso na fatura; a contratada desses meses é a atual.",
     "O detalhe mês a mês e os gráficos de cada unidade estão nas abas seguintes.",
   ];
   for (const nota of notas) aba.getCell(++linha, 1).value = "• " + nota;
@@ -182,7 +186,7 @@ export async function gerarExcel(itens, imagens, meta) {
     const det = wb.addWorksheet(nomeDeAba(wb, /^\d+$/.test(unidade.id) ? unidade.id : unidade.rotulo || "Unidade"));
     det.getCell("A1").value = unidade.rotulo;
     det.getCell("A1").font = { bold: true, size: 14 };
-    det.getCell("A2").value = `Tarifa ${unidade.modalidade} · tarifa de demanda ${unidade.modalidade === "Azul"
+    det.getCell("A2").value = `${unidade.distribuidora ? `${unidade.distribuidora} · ` : ""}Tarifa ${unidade.modalidade} · tarifa de demanda ${unidade.modalidade === "Azul"
       ? `ponta R$ ${unidade.tarifa_p.toLocaleString("pt-BR")}/kW, fora de ponta R$ ${unidade.tarifa.toLocaleString("pt-BR")}/kW`
       : `R$ ${unidade.tarifa.toLocaleString("pt-BR")}/kW`}`;
     let l = 4;
@@ -225,8 +229,8 @@ export async function gerarExcel(itens, imagens, meta) {
       analise.meses.forEach((mes, i) => {
         const a = r.detalheAtual[i];
         const o = r.detalheOtimo[i];
-        escrever(det, ++l, [mes, r.contratadasMes?.[i] ?? null, a.medida, a.custo, a.multa, o.custo, o.multa],
-          ["@", KW_DECIMAL, KW_DECIMAL, MOEDA, MOEDA, MOEDA, MOEDA]);
+        escrever(det, ++l, [analise.linhas[i]?.historico ? `${mes} (histórico)` : mes, r.contratadasMes?.[i] ?? null, a.medida,
+          a.custo, a.multa, o.custo, o.multa], ["@", KW_DECIMAL, KW_DECIMAL, MOEDA, MOEDA, MOEDA, MOEDA]);
         if (a.multa > 0) for (let c = 1; c <= 7; c++) det.getCell(l, c).fill = DESTAQUE;
       });
       l++;

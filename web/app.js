@@ -19,8 +19,10 @@ const EXEMPLO_MEDIDA = [410, 435, 460, 420, 380, 350, 340, 355, 390, 425, 450, 4
 const EXEMPLO_PONTA = [280, 300, 310, 290, 260, 240, 230, 245, 270, 295, 305, 320];
 // Tarifas ilustrativas (com tributos) para comparar as modalidades no exemplo
 const TARIFAS_EXEMPLO = {
-  Verde: { demanda: 35, energia_p: 1.7, energia_fp: 0.52 },
-  Azul: { demanda_p: 90, demanda_fp: 35, energia_p: 0.71, energia_fp: 0.52 },
+  Geral: {
+    Verde: { demanda: 35, energia_p: 1.7, energia_fp: 0.52, semTributos: false },
+    Azul: { demanda_p: 90, demanda_fp: 35, energia_p: 0.71, energia_fp: 0.52, semTributos: false },
+  },
 };
 
 // Colunas da tabela de conferência. Na tarifa verde só "contratada" e "medida" são usadas;
@@ -52,20 +54,27 @@ let arquivosEscolhidos = [];
 // ---------------------------------------------------------------- utilidades
 
 function novoEstado() {
-  return { etapa: 1, leituras: [], unidades: [], atual: 0, crescimento: 0, tarifasRef: { Verde: {}, Azul: {} } };
+  return { etapa: 1, leituras: [], unidades: [], atual: 0, crescimento: 0, tarifasRef: {}, filtro: "Todas" };
 }
 
-function novaUnidade(id, rotulo) {
-  return { id, rotulo, modalidade: "Verde", ...TARIFAS_PADRAO, tarifasDaConta: false, linhas: [] };
+function novaUnidade(id, rotulo, distribuidora = null) {
+  return { id, rotulo, distribuidora, modalidade: "Verde", ...TARIFAS_PADRAO, tarifasDaConta: false, fatorTributos: null, linhas: [] };
 }
 
 const unidadeAtual = () => estado.unidades[estado.atual];
+const nomeDistribuidora = (u) => u.distribuidora ?? "Geral";
 
 // O estado fica guardado no aparelho para não se perder se o app for fechado no meio
 function carregarEstado() {
   try {
     const salvo = JSON.parse(localStorage.getItem(CHAVE_ARMAZENAMENTO));
-    if (salvo?.etapa && salvo.unidades?.length) return { ...novoEstado(), ...salvo };
+    if (salvo?.etapa && salvo.unidades?.length) {
+      // Versões anteriores guardavam uma tabela de tarifas só, sem separar por distribuidora
+      if (salvo.tarifasRef?.Verde || salvo.tarifasRef?.Azul) {
+        salvo.tarifasRef = { Geral: { Verde: salvo.tarifasRef.Verde, Azul: salvo.tarifasRef.Azul } };
+      }
+      return { ...novoEstado(), ...salvo };
+    }
   } catch { /* sem armazenamento: começa do zero */ }
   return novoEstado();
 }
@@ -121,6 +130,9 @@ function ordemDoMes(texto) {
   return m ? Number(m[2]) * 100 + Number(m[1]) : 999999;
 }
 
+/** Número sequencial do mês (para contar meses entre duas datas). */
+const indiceDoMes = (texto) => Math.floor(ordemDoMes(texto) / 100) * 12 + (ordemDoMes(texto) % 100);
+
 const ordenar = (linhas) => [...linhas].sort((a, b) => ordemDoMes(a.mes) - ordemDoMes(b.mes));
 
 function irPara(etapa) {
@@ -135,45 +147,74 @@ function linhaVazia(mes = "", arquivo = "digitado") {
 }
 
 /**
- * Tarifas de cada modalidade para a comparação verde x azul, tiradas das contas mais recentes
- * de cada modalidade (numa fatura agrupada costuma haver unidades nas duas).
+ * Tarifas de cada modalidade, por distribuidora, para a comparação verde x azul. Vêm das contas
+ * mais recentes de cada modalidade (numa fatura agrupada costuma haver unidades nas duas).
+ * Sempre que a conta traz a tarifa sem tributos, é ela que vale: é a mesma para todas as unidades
+ * da distribuidora, e cada unidade recebe depois os tributos da própria conta.
  */
 function tarifasDasLeituras(leituras) {
-  const tarifas = { Verde: {}, Azul: {} };
-  const mes = { Verde: -1, Azul: -1 };
-  for (const conta of leituras.flatMap((l) => l.contas)) {
-    const m = conta.modalidade;
-    if (!tarifas[m] || ordemDoMes(conta.mes) < mes[m] || !conta.tarifa || !conta.energia_fp) continue;
-    mes[m] = ordemDoMes(conta.mes);
-    tarifas[m] = m === "Verde"
-      ? { demanda: conta.tarifa, energia_p: conta.energia_p, energia_fp: conta.energia_fp, mes: conta.mes }
-      : { demanda_p: conta.tarifa_p, demanda_fp: conta.tarifa, energia_p: conta.energia_p, energia_fp: conta.energia_fp, mes: conta.mes };
+  const tarifas = {};
+  const ordem = {};
+  for (const leitura of leituras) {
+    for (const conta of leitura.contas) {
+      const m = conta.modalidade;
+      if (m !== "Verde" && m !== "Azul") continue;
+      const nome = leitura.distribuidora ?? "Geral";
+      const b = conta.base ?? {};
+      const semTributos = m === "Verde" ? Boolean(b.demanda_fp && b.energia_p && b.energia_fp)
+        : Boolean(b.demanda_p && b.demanda_fp && b.energia_p && b.energia_fp);
+      const fonte = semTributos ? b
+        : { demanda_fp: conta.tarifa, demanda_p: conta.tarifa_p, energia_p: conta.energia_p, energia_fp: conta.energia_fp };
+      if (!fonte.demanda_fp || !fonte.energia_fp || ordemDoMes(conta.mes) < (ordem[`${nome}|${m}`] ?? -1)) continue;
+      ordem[`${nome}|${m}`] = ordemDoMes(conta.mes);
+      tarifas[nome] ??= {};
+      tarifas[nome][m] = m === "Verde"
+        ? { demanda: fonte.demanda_fp, energia_p: fonte.energia_p, energia_fp: fonte.energia_fp, mes: conta.mes, semTributos }
+        : { demanda_p: fonte.demanda_p, demanda_fp: fonte.demanda_fp, energia_p: fonte.energia_p, energia_fp: fonte.energia_fp,
+          mes: conta.mes, semTributos };
+    }
   }
   return tarifas;
 }
 
-/** Agrupa as contas lidas dos PDFs por unidade consumidora (número da instalação). */
+/** Tarifas com tributos das duas modalidades para uma unidade (as da distribuidora + os tributos da unidade). */
+function tarifasDaUnidade(u) {
+  const ref = estado.tarifasRef?.[nomeDistribuidora(u)] ?? {};
+  const tarifas = {};
+  for (const m of ["Verde", "Azul"]) {
+    if (!ref[m]) continue;
+    const fator = ref[m].semTributos ? (u.fatorTributos ?? 1) : 1;
+    tarifas[m] = Object.fromEntries(Object.entries(ref[m])
+      .filter(([, valor]) => typeof valor === "number").map(([campo, valor]) => [campo, valor * fator]));
+  }
+  return tarifas;
+}
+
+/** Agrupa as contas lidas dos PDFs por unidade consumidora (distribuidora + número da instalação). */
 function unidadesDasLeituras(leituras) {
   const unidades = new Map();
+  const comHistorico = [];
   for (const leitura of leituras) {
     for (const conta of leitura.contas) {
       const id = conta.instalacao ?? "sem-numero";
-      if (!unidades.has(id)) {
+      const chave = `${leitura.distribuidora ?? "Geral"}|${id}`;
+      if (!unidades.has(chave)) {
         const rotulo = conta.instalacao
           ? `Instalação ${conta.instalacao}${conta.endereco ? ` — ${conta.endereco}` : ""}`
           : "Unidade sem número de instalação";
-        const unidade = novaUnidade(id, rotulo);
+        const unidade = novaUnidade(id, rotulo, leitura.distribuidora ?? null);
         const curto = conta.instalacao ? `${conta.instalacao}${conta.endereco ? ` - ${conta.endereco}` : ""}` : rotulo;
         unidade.nomeCurto = curto.length > 36 ? `${curto.slice(0, 35)}…` : curto;
-        unidades.set(id, { ...unidade, mesMaisRecente: -1 });
+        unidades.set(chave, { ...unidade, mesMaisRecente: -1 });
       }
-      const u = unidades.get(id);
+      const u = unidades.get(chave);
       const linha = { mes: conta.mes ?? "", arquivo: leitura.arquivo };
       for (const campo of CAMPOS_DEMANDA) linha[campo] = conta[campo] ?? null;
       // O mesmo mês enviado duas vezes (mesmo PDF repetido) entra uma vez só
       const repetida = u.linhas.some((l) => l.mes && l.mes === linha.mes && CAMPOS_DEMANDA.every((c) => l[c] === linha[c]));
       if (!repetida) u.linhas.push(linha);
-      // Modalidade e tarifas: as da conta mais recente
+      if (conta.historico?.length) comHistorico.push({ u, conta, arquivo: leitura.arquivo });
+      // Modalidade, tarifas e tributos: os da conta mais recente
       const ordem = ordemDoMes(conta.mes);
       if (ordem >= u.mesMaisRecente) {
         u.mesMaisRecente = ordem;
@@ -181,11 +222,26 @@ function unidadesDasLeituras(leituras) {
         if (conta.subgrupo) u.subgrupo = conta.subgrupo;
         if (conta.tarifa) Object.assign(u, { tarifa: arredondar2(conta.tarifa), tarifasDaConta: true });
         if (conta.tarifa_p) u.tarifa_p = arredondar2(conta.tarifa_p);
+        if (conta.fatorTributos) u.fatorTributos = conta.fatorTributos;
       }
     }
   }
+  // Meses que faltam vêm do histórico impresso nas faturas (Enel), até completar os 12 meses
+  // mais recentes de cada unidade; o histórico da fatura mais recente tem prioridade
+  comHistorico.sort((a, b) => ordemDoMes(b.conta.mes) - ordemDoMes(a.conta.mes));
+  for (const { u, conta, arquivo } of comHistorico) {
+    const ultimo = indiceDoMes(u.linhas.reduce((a, l) => (ordemDoMes(l.mes) > ordemDoMes(a) ? l.mes : a), u.linhas[0].mes));
+    for (const h of conta.historico) {
+      const indice = indiceDoMes(h.mes);
+      if (indice > ultimo || indice <= ultimo - 12 || u.linhas.some((l) => l.mes === h.mes)) continue;
+      u.linhas.push({ ...linhaVazia(h.mes, `histórico da fatura de ${conta.mes} (${arquivo})`),
+        medida: h.medida, medida_p: h.medida_p, consumo_p: h.consumo_p, consumo_fp: h.consumo_fp, historico: true });
+    }
+  }
   const lista = [...unidades.values()].map(({ mesMaisRecente, ...u }) => ({ ...u, linhas: ordenar(u.linhas) }));
-  if (lista.length) return lista.sort((a, b) => a.id.localeCompare(b.id));
+  if (lista.length) {
+    return lista.sort((a, b) => nomeDistribuidora(a).localeCompare(nomeDistribuidora(b)) || a.id.localeCompare(b.id, "pt-BR", { numeric: true }));
+  }
   // Nada foi lido: uma linha por arquivo para o usuário digitar
   const unidade = novaUnidade("manual", "Unidade");
   unidade.linhas = leituras.map((l) => linhaVazia("", l.arquivo));
@@ -214,7 +270,8 @@ function etapaEnviar() {
   arquivosEscolhidos = [];
   conteudo.innerHTML = `
     <h2>Envie as contas de energia</h2>
-    <p>Escolha os PDFs das contas de energia (Light, Energisa ou Enel). Envie uma conta por mês —
+    <p>Escolha os PDFs das contas de energia (Light, Enel ou Energisa) — pode misturar as distribuidoras: o app
+      reconhece cada uma sozinho. Envie uma conta por mês —
       o ideal são os <strong>últimos 12 meses</strong>, para que a análise considere as variações
       ao longo do ano (verão, férias, etc.). Faturas agrupadas, com várias unidades consumidoras
       no mesmo PDF, também são aceitas.</p>
@@ -225,6 +282,7 @@ function etapaEnviar() {
     </label>
     <ul class="lista-arquivos" id="lista"></ul>
     <button class="primario largo" id="ler" disabled>Ler as contas e continuar ➜</button>
+    <div id="sem-demanda" aria-live="polite"></div>
     <p class="legenda centro">Não tem os PDFs à mão?</p>
     <div class="dupla">
       <button id="digitar">✏️ Prefiro digitar os valores</button>
@@ -255,10 +313,21 @@ function etapaEnviar() {
       e.target.textContent = `Lendo as contas... (${i + 1} de ${arquivosEscolhidos.length})`;
       leituras.push(await lerPdf(arquivo));
     }
+    // Nenhum PDF trouxe unidade com demanda (só Grupo B, resumos...): explica e fica na etapa 1
+    if (leituras.every((l) => !l.contas.length)) {
+      e.target.textContent = "Ler as contas e continuar ➜";
+      document.getElementById("sem-demanda").innerHTML = `
+        <div class="aviso alerta"><strong>Nenhuma unidade com demanda contratada foi encontrada nestes PDFs.</strong>
+          ${leituras.map((l) => `<p>📄 <strong>${escapar(l.arquivo)}</strong>${l.distribuidora ? ` (${escapar(l.distribuidora)})` : ""}:
+            ${escapar([...l.avisos, ...(l.semDemanda ?? []).map(textoSemDemanda)].join(" ") || "não reconheci os dados da conta.")}</p>`).join("")}
+          <p>A otimização de demanda vale para unidades do Grupo A (média e alta tensão). Se quiser, digite os valores.</p></div>`;
+      return;
+    }
     estado.leituras = leituras;
     estado.unidades = unidadesDasLeituras(leituras);
     estado.tarifasRef = tarifasDasLeituras(leituras);
     estado.atual = 0;
+    estado.filtro = "Todas";
     irPara(2);
   });
   document.getElementById("digitar").addEventListener("click", () => {
@@ -266,6 +335,8 @@ function etapaEnviar() {
     const unidade = novaUnidade("manual", "Unidade");
     unidade.linhas = ultimosMeses().map((mes) => linhaVazia(mes));
     estado.unidades = [unidade];
+    estado.tarifasRef = {};
+    estado.filtro = "Todas";
     estado.atual = 0;
     irPara(2);
   });
@@ -277,6 +348,7 @@ function etapaEnviar() {
       consumo_p: EXEMPLO_PONTA[i] * 45, consumo_fp: EXEMPLO_MEDIDA[i] * 280,
     }));
     estado.tarifasRef = structuredClone(TARIFAS_EXEMPLO);
+    estado.filtro = "Todas";
     estado.unidades = [unidade];
     estado.atual = 0;
     irPara(2);
@@ -284,6 +356,9 @@ function etapaEnviar() {
 }
 
 // ---------------------------------------------------------------- etapa 2
+
+/** Unidade fora da análise ("400061760 (sem cobrança de demanda)"); aceita o formato antigo (só o número). */
+const textoSemDemanda = (s) => (typeof s === "string" ? s : `${s.instalacao} (${s.motivo})`);
 
 function htmlLeituras(leituras) {
   if (!leituras.length) return "";
@@ -298,7 +373,7 @@ function htmlLeituras(leituras) {
       l.contas.length > 1 ? `${l.contas.length} unidades` : l.contas[0]?.modalidade && `tarifa ${l.contas[0].modalidade}`,
     ].filter(Boolean).join(" · ");
     const semDemanda = l.semDemanda?.length
-      ? `<p class="legenda">Sem cobrança de demanda, fora da análise: ${escapar(l.semDemanda.join(", "))}.</p>` : "";
+      ? `<p class="legenda">Fora da análise: ${escapar(l.semDemanda.map(textoSemDemanda).join("; "))}.</p>` : "";
     return l.avisos.length
       ? `<div class="aviso alerta">⚠️ <strong>${escapar(l.arquivo)}</strong> ${escapar(descricao)}
            ${l.avisos.map((a) => `<p>${escapar(a)}</p>`).join("")}${semDemanda}</div>`
@@ -316,10 +391,14 @@ function htmlLeituras(leituras) {
 
 function htmlSeletorUnidade() {
   if (estado.unidades.length < 2) return "";
-  const opcoes = estado.unidades.map((u, i) => {
+  const opcao = (u, i) => {
     const meses = u.linhas.length;
     return `<option value="${i}" ${i === estado.atual ? "selected" : ""}>${escapar(u.rotulo)} (${u.modalidade}, ${meses} ${meses === 1 ? "mês" : "meses"})</option>`;
-  }).join("");
+  };
+  const grupos = distribuidoras();
+  const opcoes = grupos.length > 1
+    ? grupos.map((d) => `<optgroup label="${escapar(d)}">${estado.unidades.map((u, i) => (nomeDistribuidora(u) === d ? opcao(u, i) : "")).join("")}</optgroup>`).join("")
+    : estado.unidades.map(opcao).join("");
   return `
     <label class="campo destaque-campo">Unidade consumidora (${estado.unidades.length} encontradas)
       <select id="unidade">${opcoes}</select>
@@ -327,14 +406,20 @@ function htmlSeletorUnidade() {
     </label>`;
 }
 
+/** Distribuidoras presentes na análise, em ordem alfabética. */
+const distribuidoras = () => [...new Set(estado.unidades.map(nomeDistribuidora))].sort();
+
 function colunasVisiveis(azul) {
-  const demanda = azul ? ["contratada_p", "medida_p", "contratada", "medida"] : ["contratada", "medida"];
+  // Na verde, a medida da ponta é opcional: serve para simular a azul com mais precisão
+  const demanda = azul ? ["contratada_p", "medida_p", "contratada", "medida"] : ["contratada", "medida", "medida_p"];
   return ["mes", ...demanda, "consumo_p", "consumo_fp"];
 }
 
 function rotulo(coluna, azul) {
   if (azul && coluna === "contratada") return "Contratada fora ponta (kW)";
   if (azul && coluna === "medida") return "Medida fora ponta (kW)";
+  if (!azul && coluna === "medida") return "Medida (kW, maior do mês)";
+  if (!azul && coluna === "medida_p") return "Medida ponta (kW, opcional)";
   return ROTULOS[coluna];
 }
 
@@ -362,29 +447,39 @@ function htmlTabela(linhasDaTabela, azul) {
     <button id="adicionar" class="pequeno">＋ Adicionar mês</button>`;
 }
 
-/** Tarifas das duas modalidades, usadas para dizer se vale a pena trocar de modalidade. */
+/**
+ * Tarifas das duas modalidades de cada distribuidora, usadas para dizer se vale a pena trocar de
+ * modalidade. Quando lidas das contas, são as tarifas sem tributos (iguais para todas as unidades da
+ * distribuidora); cada unidade recebe os tributos da sua própria conta.
+ */
 function htmlTarifasModalidades() {
-  const tarifas = estado.tarifasRef ?? { Verde: {}, Azul: {} };
-  const lidas = ["Verde", "Azul"].filter((m) => tarifas[m]?.mes);
-  const origem = lidas.length
-    ? `Preenchidas com as contas mais recentes (${lidas.map((m) => `${m}: ${tarifas[m].mes}`).join("; ")}). Confira se quiser.`
-    : "Preencha com os preços com tributos de uma conta de cada modalidade, da mesma distribuidora e subgrupo.";
-  const faltam = ["Verde", "Azul"].filter((m) => CAMPOS_TARIFAS[m].some(([c]) => !(tarifas[m]?.[c] > 0)));
-  const grupo = (modalidade) => `
-    <fieldset class="tarifas-modalidade">
-      <legend>Tarifa ${modalidade}</legend>
-      ${CAMPOS_TARIFAS[modalidade].map(([campo, rotuloCampo]) => `
-        <label class="campo">${rotuloCampo}
-          <input data-tarifa-modalidade="${modalidade}.${campo}" inputmode="decimal"
-            value="${mostrarNumero(tarifas[modalidade]?.[campo] != null ? Math.round(tarifas[modalidade][campo] * 1e6) / 1e6 : null)}"></label>`).join("")}
-    </fieldset>`;
+  const nomes = [...new Set([...distribuidoras(), nomeDistribuidora(unidadeAtual())])];
+  const faltando = [];
+  const blocos = nomes.map((nome) => {
+    const ref = estado.tarifasRef?.[nome] ?? {};
+    const grupo = (modalidade) => {
+      const t = ref[modalidade] ?? {};
+      if (CAMPOS_TARIFAS[modalidade].some(([c]) => !(t[c] > 0))) faltando.push(`${modalidade.toLowerCase()} (${nome})`);
+      const origem = t.mes ? `conta de ${t.mes}, ${t.semTributos ? "sem tributos" : "com tributos"}` : "com tributos";
+      return `
+        <fieldset class="tarifas-modalidade">
+          <legend>Tarifa ${modalidade} <span class="legenda">(${origem})</span></legend>
+          ${CAMPOS_TARIFAS[modalidade].map(([campo, rotuloCampo]) => `
+            <label class="campo">${rotuloCampo}
+              <input data-tarifa="${escapar(nome)}|${modalidade}|${campo}" inputmode="decimal"
+                value="${mostrarNumero(t[campo] != null ? Math.round(t[campo] * 1e6) / 1e6 : null)}"></label>`).join("")}
+        </fieldset>`;
+    };
+    return `${nomes.length > 1 ? `<h4>${escapar(nome)}</h4>` : ""}<div class="dupla">${grupo("Verde")}${grupo("Azul")}</div>`;
+  }).join("");
   return `
-    <details class="caixa" ${faltam.length ? "open" : ""}>
-      <summary>⚖️ Comparar as modalidades verde e azul${faltam.length ? ` — faltam tarifas da ${faltam.join(" e da ")}` : ""}</summary>
+    <details class="caixa" ${faltando.length ? "open" : ""}>
+      <summary>⚖️ Comparar as modalidades verde e azul${faltando.length ? ` — faltam tarifas: ${escapar(faltando.join(", "))}` : ""}</summary>
       <p class="legenda">O app calcula o custo de demanda <strong>e de energia</strong> nas duas modalidades, cada uma com a demanda
-        contratada ideal, e diz qual sai mais barata. Para isso usa os consumos (kWh) da tabela e as tarifas abaixo, com tributos.
-        ${origem}</p>
-      <div class="dupla">${grupo("Verde")}${grupo("Azul")}</div>
+        contratada ideal, e diz qual sai mais barata, usando os consumos (kWh) da tabela e as tarifas abaixo. As tarifas lidas
+        das contas são as <strong>sem tributos</strong> (iguais para todas as unidades da distribuidora); cada unidade recebe
+        os tributos da própria conta, o que considera, por exemplo, unidades isentas de ICMS. Se digitar, use valores com tributos.</p>
+      ${blocos}
     </details>`;
 }
 
@@ -519,11 +614,13 @@ function etapaConferir() {
     salvarEstado();
   }
   for (const id of ["tarifa", "tarifa_p", "crescimento"]) document.getElementById(id)?.addEventListener("input", lerParametros);
-  for (const campo of conteudo.querySelectorAll("[data-tarifa-modalidade]")) {
+  for (const campo of conteudo.querySelectorAll("[data-tarifa]")) {
     campo.addEventListener("input", () => {
-      const [modalidade, chave] = campo.dataset.tarifaModalidade.split(".");
-      estado.tarifasRef ??= { Verde: {}, Azul: {} };
-      estado.tarifasRef[modalidade][chave] = lerNumero(campo.value);
+      const [nome, modalidade, chave] = campo.dataset.tarifa.split("|");
+      estado.tarifasRef ??= {};
+      estado.tarifasRef[nome] ??= {};
+      estado.tarifasRef[nome][modalidade] ??= { semTributos: false };
+      estado.tarifasRef[nome][modalidade][chave] = lerNumero(campo.value);
       salvarEstado();
     });
   }
@@ -587,7 +684,7 @@ function analisarUnidade(u) {
     : { "Demanda": analisar("medida", "contratada", u.tarifa) };
   const economiaDemanda = Object.values(resultados).reduce((total, r) => total + r.economia, 0);
   // Verde x azul: custo de demanda + energia de cada modalidade, com a demanda ideal de cada uma
-  const comparacao = compararModalidades(linhas, estado.tarifasRef ?? {}, { modalidadeAtual: u.modalidade, subgrupo: u.subgrupo, fator });
+  const comparacao = compararModalidades(linhas, tarifasDaUnidade(u), { modalidadeAtual: u.modalidade, subgrupo: u.subgrupo, fator });
   const trocar = comparacao.disponivel && comparacao.melhor !== u.modalidade;
   return {
     resultados, meses: linhas.map((l) => l.mes), linhas, comparacao, trocar, economiaDemanda,
@@ -618,8 +715,9 @@ function htmlModalidade(u, a) {
   const ultima = (campo) => a.linhas.map((l) => l[campo]).filter((v) => v != null).at(-1);
   const contratosAtuais = u.modalidade === "Azul"
     ? `ponta ${kw(ultima("contratada_p"))}, fora de ponta ${kw(ultima("contratada"))}` : kw(ultima("contratada"));
-  const linha = (nome, contratos, v, melhor) => `<tr class="${melhor ? "melhor" : ""}"><td>${nome}</td><td>${contratos}</td>
-    <td>${reais(v.custoDemanda)}</td><td>${reais(v.custoEnergia)}</td><td>${reais(v.total)}</td></tr>`;
+  const linha = (nome, contratos, v, melhor) => `<tr class="${melhor ? "melhor" : ""}"><td>${nome}</td>
+    <td data-rotulo="Demanda contratada">${contratos}</td><td data-rotulo="Custo de demanda">${reais(v.custoDemanda)}</td>
+    <td data-rotulo="Custo de energia">${reais(v.custoEnergia)}</td><td data-rotulo="Total no período">${reais(v.total)}</td></tr>`;
   const opcoes = Object.entries(comp.opcoes).map(([m, v]) => linha(`${m} com a demanda ideal`,
     textoContratos(Object.entries(v.postos).map(([posto, p]) => [posto, p.contratada])), v, m === comp.melhor)).join("");
   const notas = [];
@@ -670,16 +768,34 @@ function fraseRecomendacao(nome, r) {
 }
 
 /** Tabela com todas as unidades, da que mais economiza para a que menos. */
+/** A unidade aparece no filtro de distribuidora escolhido no resultado? */
+const visivel = (u) => !estado.filtro || estado.filtro === "Todas" || nomeDistribuidora(u) === estado.filtro;
+
+/** Botões para ver todas as distribuidoras ou uma só, com a economia de cada uma. */
+function htmlFiltro(analises) {
+  const nomes = distribuidoras();
+  if (nomes.length < 2) return "";
+  const economia = (nome) => estado.unidades.reduce((s, u, i) =>
+    s + (nome === "Todas" || nomeDistribuidora(u) === nome ? analises[i]?.economia ?? 0 : 0), 0);
+  const quantas = (nome) => estado.unidades.filter((u) => nome === "Todas" || nomeDistribuidora(u) === nome).length;
+  return `<div class="filtros" role="group" aria-label="Distribuidora">${["Todas", ...nomes].map((nome) => `
+    <button class="filtro" data-filtro="${escapar(nome)}" aria-pressed="${(estado.filtro ?? "Todas") === nome}">
+      <strong>${escapar(nome)}</strong> <span>${quantas(nome)} ${quantas(nome) === 1 ? "unidade" : "unidades"} · ${reais(economia(nome))}</span>
+    </button>`).join("")}</div>`;
+}
+
 function htmlResumo(analises) {
-  const ordem = estado.unidades.map((u, i) => i)
+  const ordem = estado.unidades.map((u, i) => i).filter((i) => visivel(estado.unidades[i]))
     .sort((a, b) => (analises[b]?.economia ?? -1) - (analises[a]?.economia ?? -1));
-  const total = analises.reduce((soma, a) => soma + (a?.economia ?? 0), 0);
+  const total = ordem.reduce((soma, i) => soma + (analises[i]?.economia ?? 0), 0);
+  const variasDistribuidoras = distribuidoras().length > 1;
+  const nomeUnidade = (u) => `${escapar(u.rotulo)}${variasDistribuidoras ? `<br><span class="legenda">${escapar(nomeDistribuidora(u))}</span>` : ""}`;
   const linhas = ordem.map((i) => {
     const u = estado.unidades[i];
     const a = analises[i];
     const atual = i === estado.atual ? ' class="selecionada"' : "";
     if (!a) {
-      return `<tr${atual}><td>${escapar(u.rotulo)}</td><td>${u.modalidade}</td><td colspan="2">Dados incompletos</td>
+      return `<tr${atual}><td>${nomeUnidade(u)}</td><td>${u.modalidade}</td><td colspan="2">Dados incompletos</td>
         <td><button class="pequeno" data-corrigir="${i}">Corrigir</button></td></tr>`;
     }
     const contratos = contratosRecomendados(a);
@@ -688,14 +804,16 @@ function htmlResumo(analises) {
       : Object.entries(a.resultados).map(([nome, r]) =>
         `${a.resultados.Ponta ? `${nome}: ` : ""}${kw(r.atual)} → <strong>${kw(r.otima)}</strong>`).join("<br>");
     const modalidade = a.trocar ? `${u.modalidade} → <strong>${a.modalidadeRecomendada}</strong>` : u.modalidade;
-    return `<tr${atual}><td>${escapar(u.rotulo)}</td><td>${modalidade}</td><td>${mudanca}</td>
+    return `<tr${atual}><td>${nomeUnidade(u)}</td><td>${modalidade}</td><td>${mudanca}</td>
       <td>${a.economia > 0.5 ? reais(a.economia) : "—"}</td>
       <td><button class="pequeno" data-ver="${i}">${i === estado.atual ? "Exibindo" : "Ver"}</button></td></tr>`;
   }).join("");
   return `
-    <h2>Todas as unidades</h2>
-    <p>Economia estimada somando todas: <strong>${reais(total)}</strong> no período analisado.</p>
-    ${analises.some((a) => a?.trocar) ? `<p class="legenda">Nas unidades em que vale a pena trocar de modalidade, a economia
+    <h2>${estado.filtro && estado.filtro !== "Todas" ? `Unidades da ${escapar(estado.filtro)}` : "Todas as unidades"}</h2>
+    ${htmlFiltro(analises)}
+    <p>Economia estimada somando ${ordem.length === 1 ? "a unidade" : `as ${ordem.length} unidades`}:
+      <strong>${reais(total)}</strong> no período analisado.</p>
+    ${ordem.some((i) => analises[i]?.trocar) ? `<p class="legenda">Nas unidades em que vale a pena trocar de modalidade, a economia
       considera demanda e energia; nas demais, só o ajuste de demanda.</p>` : ""}
     <div class="grafico grafico-economia" id="grafico-economia"></div>
     <div class="tabela-rolagem">
@@ -769,6 +887,12 @@ async function desenharGraficos(id, meses, r) {
 
 function etapaResultado() {
   const analises = estado.unidades.map(analisarUnidade);
+  // Só as unidades da distribuidora escolhida no filtro (ou todas)
+  const indicesVisiveis = estado.unidades.map((_, i) => i).filter((i) => visivel(estado.unidades[i]));
+  if (!indicesVisiveis.length) estado.filtro = "Todas";
+  if (indicesVisiveis.length && !indicesVisiveis.includes(estado.atual)) {
+    estado.atual = indicesVisiveis.find((i) => analises[i]) ?? indicesVisiveis[0];
+  }
   const u = unidadeAtual();
   const analise = analises[estado.atual];
   if (!analise) return irPara(2); // dados da unidade escolhida ficaram incompletos
@@ -793,6 +917,11 @@ function etapaResultado() {
     avisos.push(`<div class="aviso alerta">📅 A análise usou só ${meses.length} ${meses.length === 1 ? "mês" : "meses"}. Com menos de 12,
       a recomendação pode não considerar os meses de maior consumo do ano. Se possível, inclua mais contas.</div>`);
   }
+  const doHistorico = analise.linhas.filter((l) => l.historico).length;
+  if (doHistorico) {
+    avisos.push(`<div class="aviso info">🗂️ ${doHistorico} dos ${meses.length} meses vieram do histórico impresso na fatura
+      (demanda medida e consumo). A demanda contratada desses meses é considerada igual à atual.</div>`);
+  }
   if (estado.crescimento) {
     avisos.push(`<div class="aviso info">📈 As demandas medidas foram ajustadas em
       ${estado.crescimento > 0 ? "+" : ""}${estado.crescimento.toLocaleString("pt-BR")}% para considerar o crescimento de carga previsto.</div>`);
@@ -803,7 +932,8 @@ function etapaResultado() {
 
   conteudo.innerHTML = `
     ${varias ? htmlResumo(analises) : ""}
-    ${varias ? `<h2 id="unidade-titulo">${escapar(u.rotulo)}</h2><p class="legenda">Tarifa ${u.modalidade}</p>` : ""}
+    ${varias ? `<h2 id="unidade-titulo">${escapar(u.rotulo)}</h2>
+      <p class="legenda">${u.distribuidora ? `${escapar(u.distribuidora)} · ` : ""}${u.subgrupo ? `Subgrupo ${escapar(u.subgrupo)} · ` : ""}Tarifa ${u.modalidade}</p>` : ""}
     ${destaque}
     ${avisos.join("")}
     ${htmlModalidade(u, analise)}
@@ -813,7 +943,8 @@ function etapaResultado() {
     ${abas}
     ${postos.map(([, r], i) => `<section class="posto" data-posto="${i}" ${i ? "hidden" : ""}>${htmlPosto(i, meses, r)}</section>`).join("")}
     <hr>
-    <h3>Relatórios${varias ? ` (todas as ${estado.unidades.length} unidades)` : ""}</h3>
+    <h3>Relatórios${varias ? ` (${estado.filtro && estado.filtro !== "Todas" ? `${escapar(estado.filtro)}: ` : "todas as "}${indicesVisiveis.length}
+      ${indicesVisiveis.length === 1 ? "unidade" : "unidades"})` : ""}</h3>
     <div class="dupla">
       <button id="baixar-pdf" class="primario">📄 Baixar relatório em PDF</button>
       <button id="baixar-excel">📊 Baixar planilha Excel</button>
@@ -852,10 +983,24 @@ function etapaResultado() {
     });
   }
 
-  const itens = estado.unidades.map((unidade, i) => ({ unidade, analise: analises[i] }));
+  const itens = indicesVisiveis.map((i) => ({ unidade: estado.unidades[i], analise: analises[i] }));
+  for (const botao of conteudo.querySelectorAll("[data-filtro]")) {
+    botao.addEventListener("click", () => {
+      estado.filtro = botao.dataset.filtro;
+      salvarEstado();
+      etapaResultado();
+    });
+  }
   if (varias) {
-    const dados = itens.filter((i) => i.analise).map(({ unidade, analise }) => ({ nome: unidade.nomeCurto ?? unidade.rotulo, economia: analise.economia }));
     const elemento = document.getElementById("grafico-economia");
+    // Em telas estreitas (celular), só o número da instalação, para sobrar espaço para as barras
+    const estreita = elemento.clientWidth < 600;
+    const variasDistribuidoras = distribuidoras().length > 1;
+    const dados = itens.filter((i) => i.analise).map(({ unidade, analise }) => ({
+      nome: estreita ? `${unidade.id}${variasDistribuidoras && unidade.distribuidora ? ` (${unidade.distribuidora})` : ""}`
+        : unidade.nomeCurto ?? unidade.rotulo,
+      economia: analise.economia,
+    }));
     elemento.style.height = `${Math.max(220, 46 * dados.length + 80)}px`;
     desenharFigura(elemento, figEconomiaPorUnidade(dados)).catch((erro) => console.error(erro));
   }
@@ -879,8 +1024,10 @@ function etapaResultado() {
 
   const meta = {
     crescimento: estado.crescimento,
-    distribuidoras: [...new Set(estado.leituras.map((l) => l.distribuidora).filter(Boolean))],
-    arquivos: estado.leituras.length,
+    distribuidoras: [...new Set(itens.map(({ unidade }) => unidade.distribuidora).filter(Boolean))],
+    arquivos: estado.leituras.filter((l) => l.contas.some((c) => itens.some(({ unidade }) =>
+      unidade.id === (c.instalacao ?? "sem-numero") && unidade.distribuidora === (l.distribuidora ?? null)))).length,
+    mesesDoHistorico: itens.some(({ analise }) => analise?.linhas.some((l) => l.historico)),
     versao: VERSAO,
   };
   const baixarRelatorio = async (botao, gerar, extensao) => {

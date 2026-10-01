@@ -232,29 +232,42 @@ export async function imagensDosRelatorios(itens, aoProgredir = () => {}) {
   return { economia, unidades };
 }
 
+/** Valor curto para rótulos em telas pequenas: "R$ 761 mil", "R$ 1,2 mi". */
+function reaisCurto(v) {
+  if (Math.abs(v) >= 1e6) return `R$ ${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
+  if (Math.abs(v) >= 1e3) return `R$ ${Math.round(v / 1e3).toLocaleString("pt-BR")} mil`;
+  return reais(v);
+}
+
 /** Custo do período (demanda + energia): situação atual x cada modalidade com a demanda ideal. */
 export function figComparacaoModalidades(comp, { exportar = false, titulo = "Custo no período por modalidade: demanda + energia" } = {}) {
-  const nomes = [`Hoje (${comp.atual.modalidade}, contratos atuais)`, ...Object.keys(comp.opcoes).map((m) => `${m} com a demanda ideal`)];
+  // Nomes em duas linhas, para não precisarem ficar inclinados (na tela, mais curtos ainda)
+  const nomes = [`Hoje<br>(${comp.atual.modalidade})`,
+    ...Object.keys(comp.opcoes).map((m) => (exportar ? `${m} com a<br>demanda ideal` : `${m}<br>(ideal)`))];
   const valores = [comp.atual, ...Object.values(comp.opcoes)];
   const melhor = 1 + Object.keys(comp.opcoes).indexOf(comp.melhor);
-  const cor = (escura, clara) => valores.map((_, i) => (i === melhor ? (escura ? VERDE : "#9fd4b4") : escura ? AZUL : "#b4c8ee"));
+  const cor = (escura) => valores.map((_, i) => (i === melhor ? (escura ? VERDE : "#9fd4b4") : escura ? AZUL : "#b4c8ee"));
   const barras = (nome, campo, escura) => ({
     x: nomes, y: valores.map((v) => v[campo]), name: nome, type: "bar", marker: { color: cor(escura) },
     hovertemplate: `%{x}<br>${nome}: R$ %{y:,.2f}<extra></extra>`,
   });
+  const maior = Math.max(...valores.map((v) => v.total));
+  const formato = exportar ? reais : reaisCurto;
   return {
     data: [
       barras("Demanda", "custoDemanda", true),
       barras("Energia", "custoEnergia", false),
       {
         x: nomes, y: valores.map((v) => v.total), type: "scatter", mode: "text", showlegend: false, hoverinfo: "skip",
-        text: valores.map((v, i) => `<b>${reais(v.total)}</b>${i === melhor ? "<br>mais barata" : ""}`),
-        textposition: "top center", textfont: { color: valores.map((_, i) => (i === melhor ? VERDE : TINTA)), size: exportar ? 14 : 13 },
+        text: valores.map((v, i) => `<b>${formato(v.total)}</b>${i === melhor ? "<br>mais barata" : ""}`),
+        textposition: "top center", textfont: { color: valores.map((_, i) => (i === melhor ? VERDE : TINTA)), size: exportar ? 14 : 12 },
       },
     ],
     layout: layoutBase({
       titulo, exportar, barmode: "stack", bargap: 0.45,
-      eixoY: { title: { text: "R$" }, tickprefix: "R$ ", tickformat: ",.0f", rangemode: "tozero" },
+      eixoX: { tickangle: 0 },
+      // Espaço acima das barras para os totais
+      eixoY: { title: { text: "R$" }, tickprefix: "R$ ", tickformat: ",.0f", range: [0, maior * 1.25] },
       margin: { t: exportar ? 70 : 30, r: 16, b: 10, l: 10 },
     }),
   };

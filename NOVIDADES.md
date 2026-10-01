@@ -1,5 +1,14 @@
 # Novidades
 
+## 2.2.0
+
+- Relatório em PDF com estrutura de relatório técnico: capa, introdução, metodologia e premissas,
+  medições, análise de cada unidade consumidora (com gráficos e tabelas) e conclusão com recomendações.
+- A planilha Excel traz todas as unidades: uma aba por unidade, com o mês a mês e os gráficos.
+- Gráficos melhores: faixa de tolerância sem multa, contrato de cada mês, curva de custo focada na região
+  que interessa com a economia indicada, novo gráfico de custo mensal (atual x recomendada, com a multa
+  destacada) e gráfico de economia por unidade.
+
 ## 2.1.0
 
 - Lê as faturas agrupadas da Light, com várias unidades consumidoras no mesmo PDF.

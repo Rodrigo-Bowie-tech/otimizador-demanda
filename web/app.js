@@ -4,9 +4,11 @@
 // trazem uma UC por página. Cada UC tem sua modalidade, tarifas e meses.
 
 import { analisarPosto, DEMANDA_MINIMA } from "./calculo.js";
-import { curvaDeCusto, demandaPorMes } from "./graficos.js";
+import { desenhar as desenharFigura, figCurvaDeCusto, figCustoPorMes, figDemandaPorMes, figEconomiaPorUnidade,
+  imagensDosRelatorios } from "./graficos.js";
 import { lerPdf } from "./leitor_pdf.js";
 import { gerarExcel } from "./relatorio.js";
+import { gerarPdf } from "./relatorio_pdf.js";
 import { VERSAO } from "./versao.js";
 
 const TARIFAS_PADRAO = { tarifa: 35, tarifa_p: 90 };
@@ -128,7 +130,10 @@ function unidadesDasLeituras(leituras) {
         const rotulo = conta.instalacao
           ? `Instalação ${conta.instalacao}${conta.endereco ? ` — ${conta.endereco}` : ""}`
           : "Unidade sem número de instalação";
-        unidades.set(id, { ...novaUnidade(id, rotulo), mesMaisRecente: -1 });
+        const unidade = novaUnidade(id, rotulo);
+        const curto = conta.instalacao ? `${conta.instalacao}${conta.endereco ? ` - ${conta.endereco}` : ""}` : rotulo;
+        unidade.nomeCurto = curto.length > 36 ? `${curto.slice(0, 35)}…` : curto;
+        unidades.set(id, { ...unidade, mesMaisRecente: -1 });
       }
       const u = unidades.get(id);
       const linha = { mes: conta.mes ?? "", arquivo: leitura.arquivo };
@@ -498,13 +503,17 @@ function analisarUnidade(u) {
   const analisar = (campoMedida, campoContratada, tarifa) => {
     const medidas = linhas.map((l) => l[campoMedida] * fator);
     const atual = linhas.map((l) => l[campoContratada]).filter((v) => v != null).at(-1);
-    return analisarPosto(medidas, tarifa, atual);
+    const resultado = analisarPosto(medidas, tarifa, atual);
+    // Contratada de cada mês (meses em branco repetem o mês anterior), para os gráficos
+    let anterior = linhas.find((l) => l[campoContratada] != null)[campoContratada];
+    resultado.contratadasMes = linhas.map((l) => (anterior = l[campoContratada] ?? anterior));
+    return resultado;
   };
   const resultados = u.modalidade === "Azul"
     ? { "Ponta": analisar("medida_p", "contratada_p", u.tarifa_p), "Fora de ponta": analisar("medida", "contratada", u.tarifa) }
     : { "Demanda": analisar("medida", "contratada", u.tarifa) };
   const economia = Object.values(resultados).reduce((total, r) => total + r.economia, 0);
-  return { resultados, meses: linhas.map((l) => l.mes), economia };
+  return { resultados, meses: linhas.map((l) => l.mes), linhas, economia };
 }
 
 function fraseRecomendacao(nome, r) {
@@ -545,6 +554,7 @@ function htmlResumo(analises) {
   return `
     <h2>Todas as unidades</h2>
     <p>Economia estimada somando todas: <strong>${reais(total)}</strong> no período analisado.</p>
+    <div class="grafico grafico-economia" id="grafico-economia"></div>
     <div class="tabela-rolagem">
       <table class="resumo">
         <thead><tr><th>Unidade</th><th>Modalidade</th><th>Contratada atual → recomendada</th><th>Economia</th><th></th></tr></thead>
@@ -575,7 +585,7 @@ function htmlPosto(id, meses, r) {
     <h3>Demanda medida mês a mês</h3>
     <div class="grafico" id="grafico-mes-${id}"></div>
     <p class="legenda">Cada barra é a maior demanda registrada no mês. <strong>Barras laranja</strong> são meses com multa
-      de ultrapassagem no contrato atual. A <strong>linha verde</strong> é a demanda recomendada, e a pontilhada mostra até
+      de ultrapassagem no contrato atual. A <strong>linha verde</strong> é a demanda recomendada, e a faixa verde mostra até
       onde a demanda pode chegar sem multa (5% acima da contratada).</p>
 
     <h3>Quanto custaria cada opção</h3>
@@ -583,6 +593,11 @@ function htmlPosto(id, meses, r) {
     <p class="legenda">Cada ponto da curva mostra quanto seria pago de demanda no período para cada valor contratado.
       <strong>À esquerda</strong> do ponto verde, as multas de ultrapassagem encarecem a conta; <strong>à direita</strong>,
       paga-se por uma demanda que não é usada.</p>
+
+    <h3>Custo de cada mês: atual x recomendada</h3>
+    <div class="grafico" id="grafico-custo-${id}"></div>
+    <p class="legenda">Custo de demanda de cada mês com o contrato atual (laranja) e com o valor recomendado (verde).
+      A parte mais escura de cada barra é a multa de ultrapassagem.</p>
 
     <details class="caixa">
       <summary>Ver detalhes mês a mês</summary>
@@ -598,11 +613,12 @@ function htmlPosto(id, meses, r) {
 
 async function desenharGraficos(id, meses, r) {
   try {
-    await demandaPorMes(document.getElementById(`grafico-mes-${id}`), meses, r);
-    await curvaDeCusto(document.getElementById(`grafico-curva-${id}`), r);
+    await desenharFigura(document.getElementById(`grafico-mes-${id}`), figDemandaPorMes(meses, r));
+    await desenharFigura(document.getElementById(`grafico-curva-${id}`), figCurvaDeCusto(r));
+    await desenharFigura(document.getElementById(`grafico-custo-${id}`), figCustoPorMes(meses, r));
   } catch (erro) {
     console.error(erro);
-    for (const el of conteudo.querySelectorAll(`#grafico-mes-${id}, #grafico-curva-${id}`)) {
+    for (const el of conteudo.querySelectorAll(`#grafico-mes-${id}, #grafico-curva-${id}, #grafico-custo-${id}`)) {
       el.innerHTML = '<p class="aviso alerta">Não consegui carregar o gráfico. Verifique a internet e abra o app de novo.</p>';
     }
   }
@@ -646,7 +662,12 @@ function etapaResultado() {
     ${abas}
     ${postos.map(([, r], i) => `<section class="posto" data-posto="${i}" ${i ? "hidden" : ""}>${htmlPosto(i, meses, r)}</section>`).join("")}
     <hr>
-    <button id="baixar" class="primario largo">📥 Baixar relatório em Excel</button>
+    <h3>Relatórios${varias ? ` (todas as ${estado.unidades.length} unidades)` : ""}</h3>
+    <div class="dupla">
+      <button id="baixar-pdf" class="primario">📄 Baixar relatório em PDF</button>
+      <button id="baixar-excel">📊 Baixar planilha Excel</button>
+    </div>
+    <p class="legenda" id="progresso-relatorio" aria-live="polite"></p>
     <details class="caixa">
       <summary>ℹ️ Antes de pedir a alteração à distribuidora</summary>
       <ul>
@@ -678,6 +699,13 @@ function etapaResultado() {
     });
   }
 
+  const itens = estado.unidades.map((unidade, i) => ({ unidade, analise: analises[i] }));
+  if (varias) {
+    const dados = itens.filter((i) => i.analise).map(({ unidade, analise }) => ({ nome: unidade.nomeCurto ?? unidade.rotulo, economia: analise.economia }));
+    const elemento = document.getElementById("grafico-economia");
+    elemento.style.height = `${Math.max(220, 46 * dados.length + 80)}px`;
+    desenharFigura(elemento, figEconomiaPorUnidade(dados)).catch((erro) => console.error(erro));
+  }
   const desenhados = new Set([0]);
   desenharGraficos(0, meses, postos[0][1]);
   for (const aba of conteudo.querySelectorAll("[data-aba]")) {
@@ -692,28 +720,39 @@ function etapaResultado() {
     });
   }
 
-  document.getElementById("baixar").addEventListener("click", async (e) => {
-    const botao = e.currentTarget;
-    botao.disabled = true;
-    botao.textContent = "Gerando o relatório...";
+  const meta = {
+    crescimento: estado.crescimento,
+    distribuidoras: [...new Set(estado.leituras.map((l) => l.distribuidora).filter(Boolean))],
+    arquivos: estado.leituras.length,
+    versao: VERSAO,
+  };
+  const baixarRelatorio = async (botao, gerar, extensao) => {
+    const botoes = conteudo.querySelectorAll("#baixar-pdf, #baixar-excel");
+    const progresso = document.getElementById("progresso-relatorio");
+    botoes.forEach((b) => (b.disabled = true));
     try {
-      const resumo = varias ? estado.unidades.map((unidade, i) => ({ unidade, analise: analises[i] })) : [];
-      const parametros = { modalidade: u.modalidade, crescimento: estado.crescimento, unidade: varias ? u.rotulo : null };
-      const blob = await gerarExcel(resultados, meses, parametros, resumo);
-      const sufixo = varias && u.id !== "sem-numero" ? `_${u.id}` : "";
-      const nome = `analise_demanda${sufixo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      progresso.textContent = "Preparando os gráficos...";
+      const imagens = await imagensDosRelatorios(itens, (feitas, total) => {
+        progresso.textContent = `Preparando os gráficos... (${feitas} de ${total})`;
+      });
+      progresso.textContent = "Montando o relatório...";
+      const blob = await gerar(itens, imagens, meta);
+      const nome = `analise_demanda_${new Date().toISOString().slice(0, 10)}.${extensao}`;
       const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: nome });
       document.body.append(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+      progresso.textContent = `Pronto: ${nome}`;
     } catch (erro) {
       console.error(erro);
+      progresso.textContent = "";
       alert("Não consegui gerar o relatório. Verifique a internet e tente de novo.");
     }
-    botao.disabled = false;
-    botao.textContent = "📥 Baixar relatório em Excel";
-  });
+    botoes.forEach((b) => (b.disabled = false));
+  };
+  document.getElementById("baixar-pdf").addEventListener("click", (e) => baixarRelatorio(e.currentTarget, gerarPdf, "pdf"));
+  document.getElementById("baixar-excel").addEventListener("click", (e) => baixarRelatorio(e.currentTarget, gerarExcel, "xlsx"));
   document.getElementById("corrigir").addEventListener("click", () => irPara(2));
   document.getElementById("nova").addEventListener("click", () => {
     estado = novoEstado();

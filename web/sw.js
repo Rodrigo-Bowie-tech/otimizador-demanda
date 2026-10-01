@@ -7,13 +7,16 @@
 const CACHE_APP = "app-__BUILD__";
 // As bibliotecas são grandes e mudam pouco: ficam num cache separado, que só é
 // baixado de novo quando o nome abaixo muda (ao trocar a versão de alguma delas)
-const CACHE_LIBS = "libs-plotly4.1.1-pdfjs6.3.289-exceljs4.4.0";
+const CACHE_LIBS = "libs-plotly4.1.1-pdfjs6.3.289-exceljs4.4.0-jspdf4.2.1-autotable5.0.8";
 
 const ARQUIVOS_APP = [
-  "./", "index.html", "estilo.css", "app.js", "calculo.js", "leitor_pdf.js", "graficos.js", "relatorio.js",
+  "./", "index.html", "estilo.css", "app.js", "calculo.js", "leitor_pdf.js", "graficos.js", "relatorio.js", "relatorio_pdf.js",
   "versao.js", "manifest.webmanifest", "icones/icone.svg", "icones/icone-192.png", "icones/icone-512.png",
 ];
-const ARQUIVOS_LIBS = ["lib/plotly.min.js", "lib/pdf.min.js", "lib/pdf.worker.min.js", "lib/exceljs.min.js"];
+const ARQUIVOS_LIBS = [
+  "lib/plotly.min.js", "lib/pdf.min.js", "lib/pdf.worker.min.js", "lib/exceljs.min.js",
+  "lib/jspdf.umd.min.js", "lib/jspdf.plugin.autotable.min.js",
+];
 
 self.addEventListener("install", (evento) => {
   evento.waitUntil((async () => {

@@ -46,4 +46,4 @@ Veja `versao-python/README.md`.
 
 ## Pendências
 
-- Calibrar `web/leitor_pdf.js` com contas reais de cada distribuidora.
+- Leitor calibrado com faturas agrupadas da Light (2024). Falta calibrar com contas reais da Energisa e da Enel.

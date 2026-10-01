@@ -34,8 +34,12 @@ function larguras(aba, valores) {
   valores.forEach((largura, i) => (aba.getColumn(i + 1).width = largura));
 }
 
-/** resultados: {nome do posto: resultado de analisarPosto}. Retorna um Blob .xlsx. */
-export async function gerarExcel(resultados, meses, parametros) {
+/**
+ * resultados: {nome do posto: resultado de analisarPosto} da unidade escolhida.
+ * resumo: [{unidade, analise}] de todas as unidades (vazio quando há uma só).
+ * Retorna um Blob .xlsx.
+ */
+export async function gerarExcel(resultados, meses, parametros, resumo = []) {
   const ExcelJS = await carregarExcelJS();
   const wb = new ExcelJS.Workbook();
 
@@ -45,6 +49,7 @@ export async function gerarExcel(resultados, meses, parametros) {
   aba.getCell("A1").font = { bold: true, size: 14 };
   aba.getCell("A2").value = `Gerado em ${new Date().toLocaleDateString("pt-BR")}`;
   const info = [
+    ...(parametros.unidade ? [["Unidade consumidora", parametros.unidade]] : []),
     ["Modalidade tarifária", parametros.modalidade],
     ["Período analisado", `${meses[0]} a ${meses.at(-1)} (${meses.length} meses)`],
     ["Crescimento de carga considerado", `${parametros.crescimento.toFixed(1).replace(".", ",")}%`],
@@ -84,6 +89,34 @@ export async function gerarExcel(resultados, meses, parametros) {
   ];
   for (const nota of notas) aba.getCell(++linha, 1).value = "• " + nota;
   larguras(aba, [34, 16, 14, 20, 22, 18, 22]);
+
+  // ---- Todas as unidades (faturas agrupadas)
+  if (resumo.length > 1) {
+    const todas = wb.addWorksheet("Todas as unidades");
+    cabecalho(todas, 1, ["Unidade consumidora", "Modalidade", "Posto", "Contratada atual (kW)", "Recomendada (kW)",
+      "Economia estimada no período", "Meses analisados"]);
+    todas.getRow(1).height = 32;
+    let n = 2;
+    for (const { unidade, analise } of resumo) {
+      if (!analise) {
+        todas.getRow(n++).values = [unidade.rotulo, unidade.modalidade, "Dados incompletos"];
+        continue;
+      }
+      for (const [nome, r] of Object.entries(analise.resultados)) {
+        todas.getRow(n).values = [unidade.rotulo, unidade.modalidade, nome, r.atual, r.otima, r.economia, analise.meses.length];
+        todas.getCell(n, 4).numFmt = KW;
+        todas.getCell(n, 5).numFmt = KW;
+        todas.getCell(n, 6).numFmt = MOEDA;
+        n++;
+      }
+    }
+    todas.getCell(n, 1).value = "Total";
+    todas.getCell(n, 1).font = NEGRITO;
+    todas.getCell(n, 6).value = resumo.reduce((soma, { analise }) => soma + (analise?.economia ?? 0), 0);
+    todas.getCell(n, 6).numFmt = MOEDA;
+    todas.getCell(n, 6).font = NEGRITO;
+    larguras(todas, [52, 12, 14, 16, 16, 20, 12]);
+  }
 
   // ---- Uma aba de detalhe por posto
   for (const [nome, r] of Object.entries(resultados)) {

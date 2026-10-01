@@ -1,4 +1,7 @@
 // Otimizador de Demanda Contratada — app em 3 etapas, que roda inteiro no aparelho.
+//
+// Uma análise pode ter várias unidades consumidoras (UCs): as faturas agrupadas
+// trazem uma UC por página. Cada UC tem sua modalidade, tarifas e meses.
 
 import { analisarPosto, DEMANDA_MINIMA } from "./calculo.js";
 import { curvaDeCusto, demandaPorMes } from "./graficos.js";
@@ -6,7 +9,8 @@ import { lerPdf } from "./leitor_pdf.js";
 import { gerarExcel } from "./relatorio.js";
 import { VERSAO } from "./versao.js";
 
-const PARAMETROS_PADRAO = { modalidade: "Verde", tarifa: 35, tarifa_p: 90, crescimento: 0 };
+const TARIFAS_PADRAO = { tarifa: 35, tarifa_p: 90 };
+const CHAVE_ARMAZENAMENTO = "estado-v2";
 
 // Dados de exemplo (valores ilustrativos) para conhecer o programa
 const EXEMPLO_MEDIDA = [410, 435, 460, 420, 380, 350, 340, 355, 390, 425, 450, 470];
@@ -21,6 +25,7 @@ const ROTULOS = {
   contratada_p: "Contratada ponta (kW)",
   medida_p: "Medida ponta (kW)",
 };
+const CAMPOS_DEMANDA = ["contratada", "medida", "contratada_p", "medida_p"];
 const AJUDA_CONTRATADA = "Valor de demanda que consta no contrato com a distribuidora naquele mês.";
 const AJUDA_MEDIDA = "Maior demanda registrada pelo medidor no mês (também chamada de demanda registrada ou lida).";
 
@@ -31,14 +36,20 @@ let arquivosEscolhidos = [];
 // ---------------------------------------------------------------- utilidades
 
 function novoEstado() {
-  return { etapa: 1, leituras: [], linhas: [], parametros: { ...PARAMETROS_PADRAO } };
+  return { etapa: 1, leituras: [], unidades: [], atual: 0, crescimento: 0 };
 }
+
+function novaUnidade(id, rotulo) {
+  return { id, rotulo, modalidade: "Verde", ...TARIFAS_PADRAO, tarifasDaConta: false, linhas: [] };
+}
+
+const unidadeAtual = () => estado.unidades[estado.atual];
 
 // O estado fica guardado no aparelho para não se perder se o app for fechado no meio
 function carregarEstado() {
   try {
-    const salvo = JSON.parse(localStorage.getItem("estado"));
-    if (salvo?.etapa) return { ...novoEstado(), ...salvo };
+    const salvo = JSON.parse(localStorage.getItem(CHAVE_ARMAZENAMENTO));
+    if (salvo?.etapa && salvo.unidades?.length) return { ...novoEstado(), ...salvo };
   } catch { /* sem armazenamento: começa do zero */ }
   return novoEstado();
 }
@@ -47,7 +58,7 @@ function salvarEstado() {
   try {
     // O texto extraído dos PDFs pode ser grande e só serve para suporte: não é guardado
     const leve = { ...estado, leituras: estado.leituras.map(({ texto, ...resto }) => resto) };
-    localStorage.setItem("estado", JSON.stringify(leve));
+    localStorage.setItem(CHAVE_ARMAZENAMENTO, JSON.stringify(leve));
   } catch { /* sem armazenamento: segue só na memória */ }
 }
 
@@ -61,6 +72,7 @@ function reais(valor) {
 }
 
 const kw = (valor) => `${Math.round(valor).toLocaleString("pt-BR")} kW`;
+const arredondar2 = (valor) => Math.round(valor * 100) / 100;
 
 /** Converte o que o usuário digitou ('1.234,5', '410.5', '410') em número, ou null. */
 function lerNumero(texto) {
@@ -106,6 +118,42 @@ function linhaVazia(mes = "", arquivo = "digitado") {
   return { mes, arquivo, contratada: null, medida: null, contratada_p: null, medida_p: null };
 }
 
+/** Agrupa as contas lidas dos PDFs por unidade consumidora (número da instalação). */
+function unidadesDasLeituras(leituras) {
+  const unidades = new Map();
+  for (const leitura of leituras) {
+    for (const conta of leitura.contas) {
+      const id = conta.instalacao ?? "sem-numero";
+      if (!unidades.has(id)) {
+        const rotulo = conta.instalacao
+          ? `Instalação ${conta.instalacao}${conta.endereco ? ` — ${conta.endereco}` : ""}`
+          : "Unidade sem número de instalação";
+        unidades.set(id, { ...novaUnidade(id, rotulo), mesMaisRecente: -1 });
+      }
+      const u = unidades.get(id);
+      const linha = { mes: conta.mes ?? "", arquivo: leitura.arquivo };
+      for (const campo of CAMPOS_DEMANDA) linha[campo] = conta[campo] ?? null;
+      // O mesmo mês enviado duas vezes (mesmo PDF repetido) entra uma vez só
+      const repetida = u.linhas.some((l) => l.mes && l.mes === linha.mes && CAMPOS_DEMANDA.every((c) => l[c] === linha[c]));
+      if (!repetida) u.linhas.push(linha);
+      // Modalidade e tarifas: as da conta mais recente
+      const ordem = ordemDoMes(conta.mes);
+      if (ordem >= u.mesMaisRecente) {
+        u.mesMaisRecente = ordem;
+        if (conta.modalidade) u.modalidade = conta.modalidade;
+        if (conta.tarifa) Object.assign(u, { tarifa: arredondar2(conta.tarifa), tarifasDaConta: true });
+        if (conta.tarifa_p) u.tarifa_p = arredondar2(conta.tarifa_p);
+      }
+    }
+  }
+  const lista = [...unidades.values()].map(({ mesMaisRecente, ...u }) => ({ ...u, linhas: ordenar(u.linhas) }));
+  if (lista.length) return lista.sort((a, b) => a.id.localeCompare(b.id));
+  // Nada foi lido: uma linha por arquivo para o usuário digitar
+  const unidade = novaUnidade("manual", "Unidade");
+  unidade.linhas = leituras.map((l) => linhaVazia("", l.arquivo));
+  return [unidade];
+}
+
 function indicadorDeEtapas(atual) {
   const nomes = ["Enviar contas", "Conferir valores", "Ver resultado"];
   document.getElementById("etapas").innerHTML = nomes.map((nome, i) => {
@@ -117,6 +165,7 @@ function indicadorDeEtapas(atual) {
 }
 
 function desenhar() {
+  if (estado.etapa > 1 && !estado.unidades.length) estado.etapa = 1;
   indicadorDeEtapas(estado.etapa);
   ({ 1: etapaEnviar, 2: etapaConferir, 3: etapaResultado })[estado.etapa]();
 }
@@ -129,7 +178,8 @@ function etapaEnviar() {
     <h2>Envie as contas de energia</h2>
     <p>Escolha os PDFs das contas de energia (Light, Energisa ou Enel). Envie uma conta por mês —
       o ideal são os <strong>últimos 12 meses</strong>, para que a análise considere as variações
-      ao longo do ano (verão, férias, etc.).</p>
+      ao longo do ano (verão, férias, etc.). Faturas agrupadas, com várias unidades consumidoras
+      no mesmo PDF, também são aceitas.</p>
     <label class="soltar" id="soltar">
       <input type="file" id="arquivos" accept="application/pdf,.pdf" multiple>
       <span class="soltar-titulo">📄 Toque para escolher os PDFs</span>
@@ -162,31 +212,32 @@ function etapaEnviar() {
 
   document.getElementById("ler").addEventListener("click", async (e) => {
     e.target.disabled = true;
-    e.target.textContent = "Lendo as contas...";
     const leituras = [];
-    for (const arquivo of arquivosEscolhidos) leituras.push(await lerPdf(arquivo));
-    estado.leituras = leituras;
-    estado.linhas = ordenar(leituras.map((l) => ({
-      mes: l.mes ?? "", arquivo: l.arquivo, contratada: l.contratada ?? null, medida: l.medida ?? null,
-      contratada_p: l.contratada_p ?? null, medida_p: l.medida_p ?? null,
-    })));
-    const detectadas = leituras.map((l) => l.modalidade).filter(Boolean);
-    if (detectadas.length) {
-      const azuis = detectadas.filter((m) => m === "Azul").length;
-      estado.parametros.modalidade = azuis > detectadas.length - azuis ? "Azul" : "Verde";
+    for (const [i, arquivo] of arquivosEscolhidos.entries()) {
+      e.target.textContent = `Lendo as contas... (${i + 1} de ${arquivosEscolhidos.length})`;
+      leituras.push(await lerPdf(arquivo));
     }
+    estado.leituras = leituras;
+    estado.unidades = unidadesDasLeituras(leituras);
+    estado.atual = 0;
     irPara(2);
   });
   document.getElementById("digitar").addEventListener("click", () => {
     estado.leituras = [];
-    estado.linhas = ultimosMeses().map((mes) => linhaVazia(mes));
+    const unidade = novaUnidade("manual", "Unidade");
+    unidade.linhas = ultimosMeses().map((mes) => linhaVazia(mes));
+    estado.unidades = [unidade];
+    estado.atual = 0;
     irPara(2);
   });
   document.getElementById("exemplo").addEventListener("click", () => {
     estado.leituras = [];
-    estado.linhas = ultimosMeses().map((mes, i) => ({
+    const unidade = novaUnidade("exemplo", "Exemplo");
+    unidade.linhas = ultimosMeses().map((mes, i) => ({
       mes, arquivo: "exemplo", contratada: 500, medida: EXEMPLO_MEDIDA[i], contratada_p: 250, medida_p: EXEMPLO_PONTA[i],
     }));
+    estado.unidades = [unidade];
+    estado.atual = 0;
     irPara(2);
   });
 }
@@ -199,11 +250,18 @@ function htmlLeituras(leituras) {
   let titulo = `Leitura dos arquivos: ${leituras.length - comAviso} ok`;
   if (comAviso) titulo += `, ${comAviso} precisam de atenção`;
   const itens = leituras.map((l) => {
-    const descricao = [l.distribuidora, l.mes, l.modalidade && `tarifa ${l.modalidade}`].filter(Boolean).join(" · ");
+    const meses = [...new Set(l.contas.map((c) => c.mes).filter(Boolean))];
+    const descricao = [
+      l.distribuidora,
+      meses.join(", "),
+      l.contas.length > 1 ? `${l.contas.length} unidades` : l.contas[0]?.modalidade && `tarifa ${l.contas[0].modalidade}`,
+    ].filter(Boolean).join(" · ");
+    const semDemanda = l.semDemanda?.length
+      ? `<p class="legenda">Sem cobrança de demanda, fora da análise: ${escapar(l.semDemanda.join(", "))}.</p>` : "";
     return l.avisos.length
       ? `<div class="aviso alerta">⚠️ <strong>${escapar(l.arquivo)}</strong> ${escapar(descricao)}
-           ${l.avisos.map((a) => `<p>${escapar(a)}</p>`).join("")}</div>`
-      : `<div class="aviso ok">✅ <strong>${escapar(l.arquivo)}</strong> — ${escapar(descricao)}</div>`;
+           ${l.avisos.map((a) => `<p>${escapar(a)}</p>`).join("")}${semDemanda}</div>`
+      : `<div class="aviso ok">✅ <strong>${escapar(l.arquivo)}</strong> — ${escapar(descricao)}${semDemanda}</div>`;
   }).join("");
   const lidos = leituras.filter((l) => l.texto);
   const texto = lidos.length ? `
@@ -213,6 +271,19 @@ function htmlLeituras(leituras) {
       <pre id="texto-extraido">${escapar(lidos[0].texto)}</pre>
     </details>` : "";
   return `<details class="caixa" ${comAviso ? "open" : ""}><summary>${titulo}</summary>${itens}</details>${texto}`;
+}
+
+function htmlSeletorUnidade() {
+  if (estado.unidades.length < 2) return "";
+  const opcoes = estado.unidades.map((u, i) => {
+    const meses = u.linhas.length;
+    return `<option value="${i}" ${i === estado.atual ? "selected" : ""}>${escapar(u.rotulo)} (${u.modalidade}, ${meses} ${meses === 1 ? "mês" : "meses"})</option>`;
+  }).join("");
+  return `
+    <label class="campo destaque-campo">Unidade consumidora (${estado.unidades.length} encontradas)
+      <select id="unidade">${opcoes}</select>
+      <span class="legenda">Confira cada unidade. No resultado, aparece um resumo de todas.</span>
+    </label>`;
 }
 
 function colunasVisiveis(azul) {
@@ -225,12 +296,12 @@ function rotulo(coluna, azul) {
   return ROTULOS[coluna];
 }
 
-function htmlTabela(azul) {
+function htmlTabela(linhasDaTabela, azul) {
   const colunas = colunasVisiveis(azul);
   const ajuda = (c) => (c === "mes" ? "Mês de referência da conta, no formato MM/AAAA."
     : c.startsWith("contratada") ? AJUDA_CONTRATADA : AJUDA_MEDIDA);
   const cabecalho = colunas.map((c) => `<th title="${ajuda(c)}">${rotulo(c, azul)}</th>`).join("");
-  const linhas = estado.linhas.map((linha, i) => `
+  const linhas = linhasDaTabela.map((linha, i) => `
     <tr>
       ${colunas.map((c, j) => `<td><input data-linha="${i}" data-col="${j}" data-campo="${c}"
           ${c === "mes" ? 'placeholder="MM/AAAA" inputmode="numeric"' : 'inputmode="decimal"'}
@@ -276,12 +347,23 @@ function validar(linhas, azul) {
   return [ordenar(linhas), erros];
 }
 
+/** Erros da unidade inteira: tabela + tarifas. */
+function validarUnidade(u) {
+  const azul = u.modalidade === "Azul";
+  const [linhas, erros] = validar(u.linhas, azul);
+  if (!erros.length && (!(u.tarifa > 0) || (azul && !(u.tarifa_p > 0)))) {
+    erros.push("Informe a tarifa de demanda (valor maior que zero).");
+  }
+  return [linhas, erros];
+}
+
 function etapaConferir() {
-  const p = estado.parametros;
-  const azul = p.modalidade === "Azul";
+  const u = unidadeAtual();
+  const azul = u.modalidade === "Azul";
   conteudo.innerHTML = `
     <h2>Confira os valores</h2>
     ${htmlLeituras(estado.leituras)}
+    ${htmlSeletorUnidade()}
 
     <fieldset class="segmentado">
       <legend>Modalidade tarifária</legend>
@@ -295,22 +377,23 @@ function etapaConferir() {
     <h3>Demandas de cada mês</h3>
     <p class="legenda">Corrija o que estiver errado e preencha as células vazias. Você também pode colar
       valores copiados do Excel. A demanda contratada <strong>atual</strong> é a do mês mais recente da tabela.</p>
-    ${htmlTabela(azul)}
+    ${htmlTabela(u.linhas, azul)}
 
     <h3>Tarifas de demanda</h3>
-    <p class="legenda">Na conta, procure a linha de <em>Demanda</em> e use o preço por kW (R$/kW), de preferência
-      já com impostos. A tarifa <strong>não muda</strong> qual é a demanda recomendada — ela só serve para
-      calcular a economia em reais.</p>
+    <p class="legenda">${u.tarifasDaConta
+      ? "✓ Preenchidas com o preço por kW (com tributos) da conta mais recente desta unidade. Confira se quiser."
+      : "Na conta, procure a linha de <em>Demanda</em> e use o preço por kW (R$/kW), de preferência já com impostos."}
+      A tarifa <strong>não muda</strong> qual é a demanda recomendada — ela só serve para calcular a economia em reais.</p>
     <div class="${azul ? "dupla" : ""}">
       ${azul ? `<label class="campo">Tarifa na ponta (R$/kW)
-        <input id="tarifa_p" inputmode="decimal" value="${mostrarNumero(p.tarifa_p)}"></label>` : ""}
+        <input id="tarifa_p" inputmode="decimal" value="${mostrarNumero(u.tarifa_p)}"></label>` : ""}
       <label class="campo">${azul ? "Tarifa fora de ponta (R$/kW)" : "Tarifa de demanda (R$/kW)"}
-        <input id="tarifa" inputmode="decimal" value="${mostrarNumero(p.tarifa)}"></label>
+        <input id="tarifa" inputmode="decimal" value="${mostrarNumero(u.tarifa)}"></label>
     </div>
     <label class="campo">Crescimento de carga previsto (%)
-      <input id="crescimento" inputmode="decimal" value="${mostrarNumero(p.crescimento)}">
+      <input id="crescimento" inputmode="decimal" value="${mostrarNumero(estado.crescimento)}">
       <span class="legenda">Use se houver previsão de novos equipamentos, expansão ou redução de atividades.
-        Ex.: 10 = a demanda vai crescer 10% em relação aos meses da tabela.</span>
+        Ex.: 10 = a demanda vai crescer 10% em relação aos meses da tabela.${estado.unidades.length > 1 ? " Vale para todas as unidades." : ""}</span>
     </label>
 
     <div id="erros"></div>
@@ -319,54 +402,59 @@ function etapaConferir() {
       <button id="calcular" class="primario">Calcular ➜</button>
     </div>`;
 
-  const seletor = document.getElementById("texto-arquivo");
-  seletor?.addEventListener("change", () => {
-    document.getElementById("texto-extraido").textContent = estado.leituras.filter((l) => l.texto)[seletor.value].texto;
+  const seletorTexto = document.getElementById("texto-arquivo");
+  seletorTexto?.addEventListener("change", () => {
+    document.getElementById("texto-extraido").textContent = estado.leituras.filter((l) => l.texto)[seletorTexto.value].texto;
+  });
+  document.getElementById("unidade")?.addEventListener("change", (e) => {
+    lerParametros();
+    estado.atual = Number(e.target.value);
+    salvarEstado();
+    etapaConferir();
   });
 
   for (const radio of conteudo.querySelectorAll('input[name="modalidade"]')) {
-    radio.addEventListener("change", () => { p.modalidade = radio.value; salvarEstado(); etapaConferir(); });
+    radio.addEventListener("change", () => { lerParametros(); u.modalidade = radio.value; salvarEstado(); etapaConferir(); });
   }
 
   const tabela = conteudo.querySelector("table.editavel");
   tabela.addEventListener("input", (e) => {
     const campo = e.target.dataset.campo;
     if (!campo) return;
-    const linha = estado.linhas[e.target.dataset.linha];
+    const linha = u.linhas[e.target.dataset.linha];
     linha[campo] = campo === "mes" ? e.target.value : lerNumero(e.target.value);
     salvarEstado();
   });
-  tabela.addEventListener("paste", (e) => colar(e, azul));
+  tabela.addEventListener("paste", (e) => colar(e, u, azul));
   tabela.addEventListener("click", (e) => {
     const i = e.target.dataset.remover;
     if (i === undefined) return;
-    estado.linhas.splice(Number(i), 1);
+    lerParametros();
+    u.linhas.splice(Number(i), 1);
     salvarEstado();
     etapaConferir();
   });
   document.getElementById("adicionar").addEventListener("click", () => {
-    estado.linhas.push(linhaVazia());
+    lerParametros();
+    u.linhas.push(linhaVazia());
     salvarEstado();
     etapaConferir();
-    conteudo.querySelector(`input[data-linha="${estado.linhas.length - 1}"]`).focus();
+    conteudo.querySelector(`input[data-linha="${u.linhas.length - 1}"]`).focus();
   });
 
-  const lerParametros = () => {
-    p.tarifa = lerNumero(document.getElementById("tarifa").value) ?? 0;
-    if (azul) p.tarifa_p = lerNumero(document.getElementById("tarifa_p").value) ?? 0;
-    p.crescimento = lerNumero(document.getElementById("crescimento").value) ?? 0;
+  function lerParametros() {
+    u.tarifa = lerNumero(document.getElementById("tarifa").value) ?? 0;
+    if (azul) u.tarifa_p = lerNumero(document.getElementById("tarifa_p").value) ?? 0;
+    estado.crescimento = lerNumero(document.getElementById("crescimento").value) ?? 0;
     salvarEstado();
-  };
+  }
   for (const id of ["tarifa", "tarifa_p", "crescimento"]) document.getElementById(id)?.addEventListener("input", lerParametros);
 
   document.getElementById("voltar").addEventListener("click", () => irPara(1));
   document.getElementById("calcular").addEventListener("click", () => {
     lerParametros();
-    const [linhas, erros] = validar(estado.linhas, azul);
-    if (!erros.length && (p.tarifa <= 0 || (azul && p.tarifa_p <= 0))) {
-      erros.push("Informe a tarifa de demanda (valor maior que zero).");
-    }
-    if (!erros.length && (p.crescimento < -50 || p.crescimento > 200)) {
+    const [linhas, erros] = validarUnidade(u);
+    if (!erros.length && (estado.crescimento < -50 || estado.crescimento > 200)) {
       erros.push("O crescimento de carga deve ficar entre -50% e 200%.");
     }
     if (erros.length) {
@@ -374,13 +462,13 @@ function etapaConferir() {
       document.getElementById("erros").scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    estado.linhas = linhas;
+    u.linhas = linhas;
     irPara(3);
   });
 }
 
 /** Colar um bloco copiado do Excel a partir da célula selecionada. */
-function colar(e, azul) {
+function colar(e, u, azul) {
   const alvo = e.target;
   if (!alvo.dataset.campo) return;
   const texto = e.clipboardData.getData("text/plain");
@@ -390,7 +478,7 @@ function colar(e, azul) {
   const linhaInicial = Number(alvo.dataset.linha);
   const colunaInicial = Number(alvo.dataset.col);
   texto.replace(/\r/g, "").replace(/\n+$/, "").split("\n").forEach((textoLinha, i) => {
-    const linha = (estado.linhas[linhaInicial + i] ??= linhaVazia());
+    const linha = (u.linhas[linhaInicial + i] ??= linhaVazia());
     textoLinha.split("\t").forEach((valor, j) => {
       const campo = colunas[colunaInicial + j];
       if (campo) linha[campo] = campo === "mes" ? valor.trim() : lerNumero(valor);
@@ -401,6 +489,23 @@ function colar(e, azul) {
 }
 
 // ---------------------------------------------------------------- etapa 3
+
+/** Analisa uma unidade. Retorna null se os dados dela estiverem incompletos. */
+function analisarUnidade(u) {
+  const [linhas, erros] = validarUnidade(u);
+  if (erros.length) return null;
+  const fator = 1 + estado.crescimento / 100;
+  const analisar = (campoMedida, campoContratada, tarifa) => {
+    const medidas = linhas.map((l) => l[campoMedida] * fator);
+    const atual = linhas.map((l) => l[campoContratada]).filter((v) => v != null).at(-1);
+    return analisarPosto(medidas, tarifa, atual);
+  };
+  const resultados = u.modalidade === "Azul"
+    ? { "Ponta": analisar("medida_p", "contratada_p", u.tarifa_p), "Fora de ponta": analisar("medida", "contratada", u.tarifa) }
+    : { "Demanda": analisar("medida", "contratada", u.tarifa) };
+  const economia = Object.values(resultados).reduce((total, r) => total + r.economia, 0);
+  return { resultados, meses: linhas.map((l) => l.mes), economia };
+}
 
 function fraseRecomendacao(nome, r) {
   const atual = kw(r.atual);
@@ -416,6 +521,37 @@ function fraseRecomendacao(nome, r) {
       `somando ${reais(r.multaAtual)}. Contratar um pouco mais sai mais barato que pagar a multa.`;
   }
   return `<strong>${nome}:</strong> manter ${atual}. O valor atual já é o mais econômico.`;
+}
+
+/** Tabela com todas as unidades, da que mais economiza para a que menos. */
+function htmlResumo(analises) {
+  const ordem = estado.unidades.map((u, i) => i)
+    .sort((a, b) => (analises[b]?.economia ?? -1) - (analises[a]?.economia ?? -1));
+  const total = analises.reduce((soma, a) => soma + (a?.economia ?? 0), 0);
+  const linhas = ordem.map((i) => {
+    const u = estado.unidades[i];
+    const a = analises[i];
+    const atual = i === estado.atual ? ' class="selecionada"' : "";
+    if (!a) {
+      return `<tr${atual}><td>${escapar(u.rotulo)}</td><td>${u.modalidade}</td><td colspan="2">Dados incompletos</td>
+        <td><button class="pequeno" data-corrigir="${i}">Corrigir</button></td></tr>`;
+    }
+    const mudanca = Object.entries(a.resultados).map(([nome, r]) =>
+      `${a.resultados.Ponta ? `${nome}: ` : ""}${kw(r.atual)} → <strong>${kw(r.otima)}</strong>`).join("<br>");
+    return `<tr${atual}><td>${escapar(u.rotulo)}</td><td>${u.modalidade}</td><td>${mudanca}</td>
+      <td>${a.economia > 0.5 ? reais(a.economia) : "—"}</td>
+      <td><button class="pequeno" data-ver="${i}">${i === estado.atual ? "Exibindo" : "Ver"}</button></td></tr>`;
+  }).join("");
+  return `
+    <h2>Todas as unidades</h2>
+    <p>Economia estimada somando todas: <strong>${reais(total)}</strong> no período analisado.</p>
+    <div class="tabela-rolagem">
+      <table class="resumo">
+        <thead><tr><th>Unidade</th><th>Modalidade</th><th>Contratada atual → recomendada</th><th>Economia</th><th></th></tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <hr>`;
 }
 
 function htmlPosto(id, meses, r) {
@@ -473,23 +609,14 @@ async function desenharGraficos(id, meses, r) {
 }
 
 function etapaResultado() {
-  const p = estado.parametros;
-  const azul = p.modalidade === "Azul";
-  const linhas = estado.linhas;
-  const meses = linhas.map((l) => l.mes);
-  const fator = 1 + p.crescimento / 100;
-
-  const analisar = (campoMedida, campoContratada, tarifa) => {
-    const medidas = linhas.map((l) => l[campoMedida] * fator);
-    const atual = linhas.map((l) => l[campoContratada]).filter((v) => v != null).at(-1);
-    return analisarPosto(medidas, tarifa, atual);
-  };
-  const resultados = azul
-    ? { "Ponta": analisar("medida_p", "contratada_p", p.tarifa_p), "Fora de ponta": analisar("medida", "contratada", p.tarifa) }
-    : { "Demanda": analisar("medida", "contratada", p.tarifa) };
+  const analises = estado.unidades.map(analisarUnidade);
+  const u = unidadeAtual();
+  const analise = analises[estado.atual];
+  if (!analise) return irPara(2); // dados da unidade escolhida ficaram incompletos
+  const { resultados, meses, economia } = analise;
   const postos = Object.entries(resultados);
+  const varias = estado.unidades.length > 1;
 
-  const economia = postos.reduce((total, [, r]) => total + r.economia, 0);
   const destaque = economia > 0.5
     ? `<div class="aviso sucesso"><h2>💡 Economia estimada de ${reais(economia)}</h2>
         <p>nos ${meses.length} meses analisados (${meses[0]} a ${meses.at(-1)}), ajustando a demanda contratada:</p>`
@@ -500,15 +627,17 @@ function etapaResultado() {
     avisos.push(`<div class="aviso alerta">📅 A análise usou só ${meses.length} ${meses.length === 1 ? "mês" : "meses"}. Com menos de 12,
       a recomendação pode não considerar os meses de maior consumo do ano. Se possível, inclua mais contas.</div>`);
   }
-  if (p.crescimento) {
+  if (estado.crescimento) {
     avisos.push(`<div class="aviso info">📈 As demandas medidas foram ajustadas em
-      ${p.crescimento > 0 ? "+" : ""}${p.crescimento.toLocaleString("pt-BR")}% para considerar o crescimento de carga previsto.</div>`);
+      ${estado.crescimento > 0 ? "+" : ""}${estado.crescimento.toLocaleString("pt-BR")}% para considerar o crescimento de carga previsto.</div>`);
   }
 
-  const abas = azul ? `<div class="abas" role="tablist">${postos.map(([nome], i) =>
+  const abas = postos.length > 1 ? `<div class="abas" role="tablist">${postos.map(([nome], i) =>
     `<button role="tab" data-aba="${i}" aria-selected="${i === 0}">${nome}</button>`).join("")}</div>` : "";
 
   conteudo.innerHTML = `
+    ${varias ? htmlResumo(analises) : ""}
+    ${varias ? `<h2 id="unidade-titulo">${escapar(u.rotulo)}</h2><p class="legenda">Tarifa ${u.modalidade}</p>` : ""}
     ${destaque}
       <ul>${postos.map(([nome, r]) => `<li>${fraseRecomendacao(nome, r)}</li>`).join("")}</ul>
     </div>
@@ -534,6 +663,21 @@ function etapaResultado() {
       <button id="nova">🔄 Nova análise</button>
     </div>`;
 
+  for (const botao of conteudo.querySelectorAll("[data-ver]")) {
+    botao.addEventListener("click", () => {
+      estado.atual = Number(botao.dataset.ver);
+      salvarEstado();
+      etapaResultado();
+      document.getElementById("unidade-titulo")?.scrollIntoView({ behavior: "smooth" });
+    });
+  }
+  for (const botao of conteudo.querySelectorAll("[data-corrigir]")) {
+    botao.addEventListener("click", () => {
+      estado.atual = Number(botao.dataset.corrigir);
+      irPara(2);
+    });
+  }
+
   const desenhados = new Set([0]);
   desenharGraficos(0, meses, postos[0][1]);
   for (const aba of conteudo.querySelectorAll("[data-aba]")) {
@@ -553,8 +697,11 @@ function etapaResultado() {
     botao.disabled = true;
     botao.textContent = "Gerando o relatório...";
     try {
-      const blob = await gerarExcel(resultados, meses, p);
-      const nome = `analise_demanda_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const resumo = varias ? estado.unidades.map((unidade, i) => ({ unidade, analise: analises[i] })) : [];
+      const parametros = { modalidade: u.modalidade, crescimento: estado.crescimento, unidade: varias ? u.rotulo : null };
+      const blob = await gerarExcel(resultados, meses, parametros, resumo);
+      const sufixo = varias && u.id !== "sem-numero" ? `_${u.id}` : "";
+      const nome = `analise_demanda${sufixo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
       const link = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: nome });
       document.body.append(link);
       link.click();

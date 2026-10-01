@@ -1,12 +1,13 @@
 // Leitura de contas de energia do Grupo A em PDF, direto no aparelho (pdf.js).
 //
-// Estratégia: extrair o texto do PDF e procurar, linha a linha, os rótulos
-// comuns nas contas ("Demanda Contratada", "Demanda Medida", "Ponta",
-// "Fora Ponta", "Referência"...). O que não for encontrado fica em branco
-// para o usuário completar na etapa de conferência.
+// Um PDF pode trazer uma ou várias unidades consumidoras (UCs). As faturas
+// agrupadas da Light têm uma página por UC, que é lida pelo leitor específico
+// (lerPaginaLight). Para outros formatos, o leitor genérico procura os rótulos
+// comuns ("Demanda Contratada", "Demanda Medida", "Ponta", "Referência"...).
+// O que não for encontrado fica em branco para o usuário completar.
 //
-// ATENÇÃO: os padrões abaixo são genéricos e ainda precisam ser calibrados
-// com contas reais de cada distribuidora (Light, Energisa, Enel).
+// Calibrado com faturas agrupadas reais da Light (2024). Energisa e Enel ainda
+// usam só o leitor genérico.
 
 const DISTRIBUIDORAS = { Light: /\bLIGHT\b/, Energisa: /\bENERGISA\b/, Enel: /\bENEL\b/ };
 
@@ -99,6 +100,99 @@ export function extrairDeTexto(texto) {
   };
 }
 
+// ---------------------------------------------------------------- faturas da Light
+
+/** Número inteiro ou decimal no fim da linha ('1.609' -> 1609). */
+const numeroNoFim = (linha) => numeroBr(linha.trim().split(" ").at(-1));
+
+/**
+ * Lê uma página de fatura da Light ("nota fiscal" de uma UC do Grupo A).
+ * Retorna null se a página não for desse tipo.
+ */
+export function lerPaginaLight(pagina) {
+  const texto = pagina.toUpperCase();
+  const linhas = texto.split("\n").map((l) => l.trim());
+  const inicio = linhas.findIndex((l) => /^GRUPO A\d?/.test(l));
+  if (inicio < 0) return null;
+
+  // Número da instalação: no fim de uma das linhas do nome do cliente, logo abaixo do grupo
+  let instalacao = null;
+  let endereco = "";
+  for (let i = inicio + 1; i < Math.min(inicio + 8, linhas.length); i++) {
+    const achou = linhas[i].match(/\b(\d{8,10})$/);
+    if (achou) {
+      instalacao = achou[1];
+      endereco = linhas[i + 1] && !/^NOTA FISCAL|^CEP/.test(linhas[i + 1]) ? linhas[i + 1] : "";
+      break;
+    }
+  }
+  const conta = {
+    instalacao,
+    endereco,
+    modalidade: ({ AZUL: "Azul", VERDE: "Verde" })[linhas[inicio].match(/\b(AZUL|VERDE)\b/)?.[1]] ?? null,
+    mes: null,
+    contratada: null, medida: null, contratada_p: null, medida_p: null,
+    tarifa: null, tarifa_p: null,
+  };
+
+  // Mês de referência: linha "FEV/2024 25/03/2024 R$8.548,72"
+  const mes = texto.match(/^(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/(\d{4}) \d{2}\/\d{2}\/\d{4}/m);
+  if (mes) conta.mes = `${String(MESES[mes[1]]).padStart(2, "0")}/${mes[2]}`;
+
+  // A medida do medidor é acrescida da perda de transformação, quando a conta informa
+  const perda = texto.match(/PERDA DE TRANSFORMA[ÇC][ÃA]O\s*=\s*([\d,]+)\s*%/);
+  const fatorPerda = perda ? 1 + numeroBr(perda[1]) / 100 : 1;
+
+  for (const linha of linhas) {
+    // Demanda contratada: bloco "Demanda 360,00" ou "Demanda Ponta 60,00" / "Demanda Fora Ponta 160,00"
+    const contrato = linha.match(/\bDEMANDA( FORA PONTA| PONTA)? ([\d.]+,\d{2})$/);
+    if (contrato) {
+      const campo = contrato[1] === " PONTA" ? "contratada_p" : "contratada";
+      conta[campo] ??= numeroBr(contrato[2]);
+    }
+    // Demanda medida: tabela do medidor, "Demanda Ativa-Kw Único 843 2.365 0,2523 384"
+    const medidor = linha.match(/DEMANDA ATIVA-KW (FORA PONTA|PONTA|[ÚU]NICO)\b.* [\d.]+$/);
+    if (medidor) {
+      const campo = medidor[1] === "PONTA" ? "medida_p" : "medida";
+      conta[campo] = (conta[campo] ?? 0) + numeroNoFim(linha); // soma se houver mais de um medidor
+    }
+    // Tarifa de demanda (preço unitário com tributos): "Demanda Ativa kW HFP/Único kW 160 24,46831364 ..."
+    const tarifa = linha.match(/^DEMANDA ATIVA KW (HFP\/[ÚU]NICO|HP) KW [\d.]+ ([\d.]+,\d+)/);
+    if (tarifa) conta[tarifa[1] === "HP" ? "tarifa_p" : "tarifa"] = numeroBr(tarifa[2]);
+  }
+  for (const campo of ["medida", "medida_p"]) {
+    if (conta[campo] != null) conta[campo] = Math.round(conta[campo] * fatorPerda * 10) / 10;
+  }
+  conta.temDemanda = conta.contratada != null || conta.medida != null;
+  return conta;
+}
+
+/** Campos que faltam numa conta, com nomes amigáveis. */
+function camposFaltando(conta) {
+  const obrigatorios = ["mes", "contratada", "medida"];
+  if (conta.modalidade === "Azul") obrigatorios.push("contratada_p", "medida_p");
+  return obrigatorios.filter((c) => conta[c] == null).map((c) => NOMES_CAMPOS[c]);
+}
+
+/**
+ * Extrai as contas de um PDF já convertido em texto (uma string por página).
+ * Retorna { distribuidora, contas: [...], semDemanda: [instalações sem cobrança de demanda] }.
+ */
+export function extrairDePaginas(paginas) {
+  const distribuidora = identificarDistribuidora(paginas.join("\n").toUpperCase());
+  const contasLight = paginas.map(lerPaginaLight).filter(Boolean);
+  if (contasLight.length) {
+    return {
+      distribuidora,
+      contas: contasLight.filter((c) => c.temDemanda),
+      semDemanda: contasLight.filter((c) => !c.temDemanda).map((c) => c.instalacao ?? "sem número"),
+    };
+  }
+  // Outros formatos: o arquivo inteiro é uma conta só
+  const { distribuidora: _, ...conta } = extrairDeTexto(paginas.join("\n"));
+  return { distribuidora, contas: [{ instalacao: null, endereco: "", ...conta }], semDemanda: [] };
+}
+
 /** Junta os pedaços de texto do pdf.js em linhas, como aparecem na conta. */
 function linhasDaPagina(itens) {
   const linhas = [];
@@ -133,19 +227,18 @@ async function carregarPdfjs() {
   return pdfjs;
 }
 
-/** Lê um arquivo PDF e devolve os dados + avisos amigáveis. */
+/** Lê um arquivo PDF e devolve as contas encontradas + avisos amigáveis. */
 export async function lerPdf(arquivo) {
-  const resultado = { arquivo: arquivo.name, avisos: [], texto: "" };
-  let texto;
+  const resultado = { arquivo: arquivo.name, avisos: [], texto: "", contas: [], semDemanda: [] };
+  let paginas;
   try {
     const biblioteca = await carregarPdfjs();
     const pdf = await biblioteca.getDocument({ data: new Uint8Array(await arquivo.arrayBuffer()) }).promise;
-    const paginas = [];
+    paginas = [];
     for (let n = 1; n <= pdf.numPages; n++) {
       const pagina = await pdf.getPage(n);
       paginas.push(linhasDaPagina((await pagina.getTextContent()).items).join("\n"));
     }
-    texto = paginas.join("\n");
   } catch (erro) {
     console.error(erro);
     resultado.avisos.push("Não consegui abrir este arquivo. Ele pode estar protegido por senha ou corrompido. " +
@@ -153,19 +246,21 @@ export async function lerPdf(arquivo) {
     return resultado;
   }
 
-  resultado.texto = texto;
-  if (texto.trim().length < 50) {
+  resultado.texto = paginas.join("\n");
+  if (resultado.texto.trim().length < 50) {
     resultado.avisos.push("Este PDF parece ser uma imagem escaneada, e não consigo ler o texto dele. " +
       "Digite os valores desta conta na tabela.");
     return resultado;
   }
 
-  Object.assign(resultado, extrairDeTexto(texto));
-
-  const obrigatorios = ["mes", "contratada", "medida"];
-  if (resultado.modalidade === "Azul") obrigatorios.push("contratada_p", "medida_p");
-  const faltando = obrigatorios.filter((c) => resultado[c] == null).map((c) => NOMES_CAMPOS[c]);
-  if (faltando.length) resultado.avisos.push("Não encontrei: " + faltando.join(", ") + ". Complete na tabela.");
+  Object.assign(resultado, extrairDePaginas(paginas));
+  for (const conta of resultado.contas) {
+    const faltando = camposFaltando(conta);
+    if (faltando.length) {
+      const qual = conta.instalacao ? `Instalação ${conta.instalacao}: n` : "N";
+      resultado.avisos.push(`${qual}ão encontrei ${faltando.join(", ")}. Complete na tabela.`);
+    }
+  }
   if (!resultado.distribuidora) resultado.avisos.push("Não reconheci a distribuidora desta conta.");
   return resultado;
 }

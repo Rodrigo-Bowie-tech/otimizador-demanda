@@ -4,32 +4,46 @@ Programa que lê contas de energia do Grupo A (Light, Energisa, Enel), em tarifa
 e calcula a demanda contratada que resulta no menor custo, considerando as multas de ultrapassagem
 (REN ANEEL 1000/2021).
 
-## Rodar em desenvolvimento
+## Usar o app (celular e computador)
 
-```
-python -m pip install -r requirements.txt
-python -m streamlit run app.py
-```
+Abra **https://rodrigo-bowie-tech.github.io/otimizador-demanda/** e instale:
 
-## Gerar o pacote para quem não programa
+- **Android / Chrome / Edge (PC):** botão "Instalar app" na tela, ou menu do navegador → "Instalar".
+- **iPhone / iPad:** Safari → Compartilhar → "Adicionar à Tela de Início".
 
-```
-powershell -ExecutionPolicy Bypass -File empacotar.ps1
-```
+O app roda inteiro no aparelho (as contas não são enviadas para a internet), funciona sem
+internet depois de instalado e se atualiza sozinho quando há versão nova.
 
-Gera `dist/OtimizadorDemanda.zip`, com um Python portátil incluso. Instruções de uso em `pacote/LEIA-ME.txt`.
+O código do app fica em `web/` (JavaScript, sem etapa de compilação). Para testar no computador:
+`python -m http.server -d web 8000` e abra http://localhost:8000.
+
+## Publicar uma versão nova
+
+1. Faça as mudanças em `web/`, altere o número em `VERSAO` e descreva as mudanças em `NOVIDADES.md`.
+2. Envie para o branch `main`.
+
+O GitHub Actions (`.github/workflows/site.yml`) publica o app no GitHub Pages, e os aparelhos com o
+app instalado baixam a versão nova sozinhos.
+
+## Versão em Python (arquivada)
+
+A primeira versão, em Python + Streamlit, fica em `versao-python/` só para consulta.
+Veja `versao-python/README.md`.
 
 ## Organização
 
 | Arquivo | Função |
 |---|---|
-| `app.py` | Interface web em 3 etapas (Streamlit) |
-| `calculo.py` | Regras de faturamento e busca da demanda ótima |
-| `leitor_pdf.py` | Extração dos dados das contas em PDF |
-| `graficos.py` | Gráficos da tela de resultado |
-| `relatorio.py` | Relatório em Excel |
-| `iniciar.py` | Abre o programa no navegador (usado pelo atalho do pacote) |
+| `web/` | App instalável (PWA): mesmas regras e telas, em JavaScript |
+| `web/sw.js` | Guarda o app para uso sem internet e instala as versões novas |
+| `web/app.js` | Telas do app em 3 etapas |
+| `web/calculo.js` | Regras de faturamento e busca da demanda ótima |
+| `web/leitor_pdf.js` | Extração dos dados das contas em PDF |
+| `web/graficos.js` | Gráficos da tela de resultado |
+| `web/relatorio.js` | Relatório em Excel |
+| `VERSAO`, `NOVIDADES.md` | Versão atual e histórico de mudanças |
+| `versao-python/` | Versão antiga em Python (arquivada) |
 
 ## Pendências
 
-- Calibrar `leitor_pdf.py` com contas reais de cada distribuidora.
+- Calibrar `web/leitor_pdf.js` com contas reais de cada distribuidora.

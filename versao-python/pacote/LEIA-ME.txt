@@ -31,6 +31,15 @@ COMO USAR
 4. Para ENCERRAR, feche a janela preta.
 
 
+ATUALIZAÇÕES
+------------
+O programa se atualiza sozinho: ao abrir, se houver internet, ele procura uma
+versão nova e a instala antes de começar. A versão em uso aparece no rodapé da tela.
+Se uma versão nova precisar do pacote completo, a janela preta mostra o endereço
+para baixá-lo:
+https://github.com/Rodrigo-Bowie-tech/otimizador-demanda/releases/latest
+
+
 SE APARECER "O Windows protegeu o computador"
 ---------------------------------------------
 Isso acontece com programas recebidos por e-mail ou pela internet.
@@ -41,3 +50,4 @@ Se o computador for da empresa e isso estiver bloqueado, fale com o TI.
 PRIVACIDADE
 -----------
 Tudo roda apenas no seu computador. As contas não são enviadas para a internet.
+(A única conexão é a consulta de versão nova no GitHub, que não envia nenhum dado.)

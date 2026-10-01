@@ -6,6 +6,7 @@ Para rodar:  python -m streamlit run app.py
 import re
 from collections import Counter
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -21,6 +22,8 @@ MES, ARQUIVO = "Mês", "Arquivo"
 CONTRATADA, MEDIDA = "Contratada (kW)", "Medida (kW)"
 CONTRATADA_P, MEDIDA_P = "Contratada ponta (kW)", "Medida ponta (kW)"
 COLUNAS = [MES, ARQUIVO, CONTRATADA, MEDIDA, CONTRATADA_P, MEDIDA_P]
+
+VERSAO = (Path(__file__).parent / "VERSAO").read_text(encoding="utf-8").strip()
 
 PARAMETROS_PADRAO = {"modalidade": "Verde", "tarifa": 35.0, "tarifa_p": 90.0, "crescimento": 0.0}
 
@@ -111,7 +114,7 @@ def etapa_enviar():
                                 label_visibility="collapsed")
 
     if st.button("Ler as contas e continuar ➜", type="primary", disabled=not arquivos,
-                 use_container_width=True):
+                 width="stretch"):
         with st.spinner("Lendo as contas..."):
             leituras = [leitor_pdf.ler_pdf(a, a.name) for a in arquivos]
         st.session_state.leituras = leituras
@@ -124,11 +127,11 @@ def etapa_enviar():
     st.write("")
     st.caption("Não tem os PDFs à mão?")
     col1, col2 = st.columns(2)
-    if col1.button("✏️ Prefiro digitar os valores", use_container_width=True):
+    if col1.button("✏️ Prefiro digitar os valores", width="stretch"):
         st.session_state.leituras = []
         st.session_state.tabela = tabela_vazia()
         ir_para(2)
-    if col2.button("🔍 Ver um exemplo", use_container_width=True):
+    if col2.button("🔍 Ver um exemplo", width="stretch"):
         st.session_state.leituras = []
         st.session_state.tabela = tabela_exemplo()
         ir_para(2)
@@ -229,7 +232,7 @@ def etapa_conferir():
     }
     visiveis = [MES, ARQUIVO, CONTRATADA_P, MEDIDA_P, CONTRATADA, MEDIDA] if azul else [MES, ARQUIVO, CONTRATADA, MEDIDA]
     editada = st.data_editor(st.session_state.tabela, column_config=config, column_order=visiveis,
-                             num_rows="dynamic", hide_index=True, use_container_width=True)
+                             num_rows="dynamic", hide_index=True, width="stretch")
     st.caption("A demanda contratada **atual** é a do mês mais recente da tabela.")
 
     st.markdown("**Tarifas de demanda**")
@@ -251,9 +254,9 @@ def etapa_conferir():
 
     st.write("")
     col1, col2 = st.columns(2)
-    if col1.button("⬅ Voltar", use_container_width=True):
+    if col1.button("⬅ Voltar", width="stretch"):
         ir_para(1)
-    if col2.button("Calcular ➜", type="primary", use_container_width=True):
+    if col2.button("Calcular ➜", type="primary", width="stretch"):
         tabela, erros = validar(editada, azul)
         if not erros and (tarifa <= 0 or (azul and tarifa_p <= 0)):
             erros.append("Informe a tarifa de demanda (valor maior que zero).")
@@ -292,13 +295,13 @@ def mostrar_posto(meses, r):
               help=f"Custo atual {reais(r['custo_atual'])} − custo com a recomendada {reais(r['custo_otimo'])}.")
 
     st.markdown("##### Demanda medida mês a mês")
-    st.plotly_chart(graficos.demanda_por_mes(meses, r), use_container_width=True)
+    st.plotly_chart(graficos.demanda_por_mes(meses, r), width="stretch")
     st.caption("Cada barra é a maior demanda registrada no mês. **Barras vermelhas** são meses com multa de "
                "ultrapassagem no contrato atual. A **linha verde** é a demanda recomendada, e a pontilhada "
                "mostra até onde a demanda pode chegar sem multa (5% acima da contratada).")
 
     st.markdown("##### Quanto custaria cada opção")
-    st.plotly_chart(graficos.curva_de_custo(r), use_container_width=True)
+    st.plotly_chart(graficos.curva_de_custo(r), width="stretch")
     st.caption("Cada ponto da curva mostra quanto seria pago de demanda no período para cada valor contratado. "
                "**À esquerda** do ponto verde, as multas de ultrapassagem encarecem a conta; **à direita**, "
                "paga-se por uma demanda que não é usada.")
@@ -314,7 +317,7 @@ def mostrar_posto(meses, r):
         })
         colunas_reais = detalhe.columns[2:]
         estilo = detalhe.style.format({c: reais for c in colunas_reais}).format({"Medida (kW)": "{:.1f}"})
-        st.dataframe(estilo, hide_index=True, use_container_width=True)
+        st.dataframe(estilo, hide_index=True, width="stretch")
 
 
 def etapa_resultado():
@@ -362,7 +365,7 @@ def etapa_resultado():
         mostrar_posto(meses, resultados["Demanda"])
 
     st.divider()
-    st.download_button("📥 Baixar relatório em Excel", type="primary", use_container_width=True,
+    st.download_button("📥 Baixar relatório em Excel", type="primary", width="stretch",
                        data=relatorio.gerar_excel(resultados, meses, p),
                        file_name=f"analise_demanda_{date.today():%Y-%m-%d}.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -377,9 +380,9 @@ def etapa_resultado():
             f"- O menor valor considerado é {calculo.DEMANDA_MINIMA} kW, mínimo do Grupo A.")
 
     col1, col2 = st.columns(2)
-    if col1.button("⬅ Voltar e corrigir valores", use_container_width=True):
+    if col1.button("⬅ Voltar e corrigir valores", width="stretch"):
         ir_para(2)
-    if col2.button("🔄 Nova análise", use_container_width=True):
+    if col2.button("🔄 Nova análise", width="stretch"):
         recomecar()
         st.rerun()
 
@@ -396,3 +399,6 @@ st.caption("Descubra o valor de demanda contratada que deixa a conta de energia 
 indicador_de_etapas(st.session_state.etapa)
 
 {1: etapa_enviar, 2: etapa_conferir, 3: etapa_resultado}[st.session_state.etapa]()
+
+st.divider()
+st.caption(f"Versão {VERSAO}")

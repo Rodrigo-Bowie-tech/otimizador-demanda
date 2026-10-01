@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Otimizador de Demanda</title>
+  <meta name="description" content="Descubra o valor de demanda contratada que deixa a conta de energia mais barata.">
+  <meta name="theme-color" content="#2e7d4f">
+  <meta name="color-scheme" content="light">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icones/icone-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Demanda">
+  <link rel="stylesheet" href="estilo.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header>
+    <div class="topo">
+      <h1>⚡ Otimizador de Demanda Contratada</h1>
+      <button id="instalar" class="pequeno" hidden>⬇ Instalar app</button>
+    </div>
+    <p class="legenda">Descubra o valor de demanda contratada que deixa a conta de energia mais barata.</p>
+    <p id="dica-iphone" class="aviso info" hidden>📲 Para instalar no iPhone: toque em <strong>Compartilhar</strong>
+      e depois em <strong>Adicionar à Tela de Início</strong>.</p>
+    <div id="nova-versao" class="aviso sucesso" hidden>✨ Há uma versão nova do app.
+      <button class="pequeno">Atualizar agora</button></div>
+    <ol id="etapas" class="etapas"></ol>
+  </header>
+  <main id="conteudo">
+    <noscript>Este app precisa de JavaScript ativado no navegador.</noscript>
+  </main>
+  <footer class="legenda"><span id="versao"></span></footer>
+</body>
+</html>

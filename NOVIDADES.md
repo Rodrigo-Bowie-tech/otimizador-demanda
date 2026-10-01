@@ -1,5 +1,16 @@
 # Novidades
 
+## 2.4.0
+
+- Lê as faturas da Enel (antiga Ampla), além das da Light, e reconhece as notas da Energisa: é só enviar
+  os PDFs de todas as distribuidoras juntos, que o app identifica cada uma.
+- Nas faturas da Enel, os meses que faltam vêm do histórico de 13 meses impresso na própria nota, até
+  completar 12 meses por unidade.
+- Unidades do Grupo B (baixa tensão) e PDFs só com o resumo do faturamento são identificados e explicados.
+- Resultado com filtro por distribuidora (Todas, Light, Enel...), e relatórios da distribuidora escolhida.
+- Comparação de modalidades com as tarifas de cada distribuidora e os tributos de cada unidade
+  (considera, por exemplo, unidades isentas de ICMS); na Enel, usa a demanda medida na ponta das unidades verdes.
+
 ## 2.3.0
 
 - O app agora diz se vale a pena trocar de modalidade tarifária (verde x azul): compara o custo de

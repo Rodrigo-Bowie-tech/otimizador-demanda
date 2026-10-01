@@ -98,9 +98,9 @@ function demandaOtimaPosto(medidas, tarifa) {
  *   (R$/kW e R$/kWh, com tributos).
  *
  * Na verde a demanda é uma só: a maior do mês, em qualquer horário. Na azul, ponta e fora de
- * ponta são cobradas separadamente. Para uma unidade verde, a demanda na ponta não é medida
- * separadamente; ela é considerada igual à demanda máxima (premissa conservadora: não
- * favorece a azul).
+ * ponta são cobradas separadamente. Para uma unidade verde, a demanda da ponta é usada quando a
+ * conta a informa (a Enel informa); senão, ela é considerada igual à demanda máxima do mês
+ * (premissa conservadora: não favorece a azul).
  */
 export function compararModalidades(linhas, tarifas, { modalidadeAtual, subgrupo = null, fator = 1 }) {
   if (linhas.some((l) => l.consumo_p == null || l.consumo_fp == null)) {
@@ -114,8 +114,9 @@ export function compararModalidades(linhas, tarifas, { modalidadeAtual, subgrupo
     return { disponivel: false, motivo: `Faltam as tarifas da modalidade ${modalidadeAtual} para a comparação.` };
   }
 
+  const pontaMedida = azulAtual || linhas.every((l) => l.medida_p != null);
   const medidaFp = linhas.map((l) => l.medida * fator);
-  const medidaP = linhas.map((l) => (azulAtual ? l.medida_p : l.medida) * fator);
+  const medidaP = linhas.map((l) => (pontaMedida ? l.medida_p : l.medida) * fator);
   const medidaUnica = medidaFp.map((m, i) => Math.max(m, medidaP[i]));
   const energia = (t) => soma(linhas.map((l) => (l.consumo_p * t.energia_p + l.consumo_fp * t.energia_fp) * fator));
   const ultima = (campo) => linhas.map((l) => l[campo]).filter((v) => v != null).at(-1);
@@ -157,6 +158,6 @@ export function compararModalidades(linhas, tarifas, { modalidadeAtual, subgrupo
     diferencaEntreModalidades: outra ? opcoes[outra].total - opcoes[melhor].total : null,
     verdePermitida,
     faltaOutraModalidade: !outra && verdePermitida,
-    pontaEstimada: !azulAtual,
+    pontaEstimada: !pontaMedida,
   };
 }

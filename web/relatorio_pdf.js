@@ -238,7 +238,8 @@ export async function gerarPdf(itens, imagens, meta) {
   const trocas = completos.filter((i) => i.analise.trocar);
   const multasTotal = completos.reduce((s, i) => s + Object.values(i.analise.resultados).reduce((t, r) => t + r.multaAtual, 0), 0);
   const variasUnidades = itens.length > 1;
-  const nome = (u) => u.rotulo;
+  const variasDistribuidoras = new Set(itens.map((i) => i.unidade.distribuidora ?? "")).size > 1;
+  const nome = (u) => (variasDistribuidoras && u.distribuidora ? `${u.rotulo} (${u.distribuidora})` : u.rotulo);
   const hoje = new Date().toLocaleDateString("pt-BR");
   const pdf = doc.pdf;
 
@@ -285,10 +286,13 @@ export async function gerarPdf(itens, imagens, meta) {
     `${plural(completos.length, "unidade consumidora analisada", "unidades consumidoras analisadas")}` +
       `${incompletos.length ? ` (${plural(incompletos.length, "outra ficou", "outras ficaram")} fora por dados incompletos)` : ""}.`,
     `Período: ${periodo} (${plural(todosMeses.length, "mês", "meses")}).`,
-    meta.arquivos ? `Fonte dos dados: ${plural(meta.arquivos, "fatura em PDF", "faturas em PDF")} da distribuidora` +
-      `${meta.distribuidoras?.length ? ` (${meta.distribuidoras.join(", ")})` : ""}, conferidas na etapa de revisão do aplicativo.`
+    meta.arquivos ? `Fonte dos dados: ${plural(meta.arquivos, "fatura em PDF", "faturas em PDF")} ` +
+      `${meta.distribuidoras?.length > 1 ? "das distribuidoras" : "da distribuidora"}` +
+      `${meta.distribuidoras?.length ? ` ${meta.distribuidoras.join(", ")}` : ""}, conferidas na etapa de revisão do aplicativo.`
       : "Fonte dos dados: valores informados pelo usuário.",
-    "Considera apenas a parcela de demanda da fatura; o consumo de energia (kWh) não é alterado pela demanda contratada.",
+    ...(meta.mesesDoHistorico ? ["Meses anteriores às faturas enviadas foram completados com o histórico de demanda medida e " +
+      "consumo impresso na própria fatura (até completar os 12 meses mais recentes de cada unidade)."] : []),
+    "O ajuste de demanda considera a parcela de demanda da fatura; a escolha da modalidade considera também a energia (kWh).",
   ]);
   if (todosMeses.length < 12) {
     doc.paragrafo(`Atenção: a análise usa ${plural(todosMeses.length, "mês", "meses")}. Com menos de 12 meses, a ` +
@@ -320,10 +324,12 @@ export async function gerarPdf(itens, imagens, meta) {
       "que na verde.",
     "A verde tende a compensar quando a unidade usa pouca demanda e pouca energia no horário de ponta; a azul, quando a " +
       "demanda e o consumo na ponta são altos.",
-    "Tarifas de energia e de demanda de cada modalidade: preços com tributos das faturas mais recentes de unidades em cada " +
-      "modalidade, da mesma distribuidora (ou informadas pelo usuário).",
-    "Para unidades na verde, a demanda na ponta não é medida separadamente; na simulação da azul ela foi considerada igual à " +
-      "demanda máxima do mês, premissa conservadora que não favorece a azul.",
+    "Tarifas de cada modalidade: as tarifas sem tributos (homologadas) das faturas mais recentes de unidades em cada " +
+      "modalidade, da mesma distribuidora. Sobre elas foram aplicados os tributos de cada unidade, calculados da sua própria " +
+      "fatura (preço com tributos dividido pela tarifa), o que considera diferenças como a isenção de ICMS.",
+    "Para unidades na verde, quando a fatura informa a demanda medida na ponta (como na Enel), ela foi usada para simular a " +
+      "azul; quando não informa, a demanda na ponta foi considerada igual à demanda máxima do mês, premissa conservadora " +
+      "que não favorece a azul.",
     "Só os subgrupos A3a, A4 e AS podem optar pela verde; os demais foram comparados apenas na azul.",
   ]);
   doc.subtitulo("Premissas", 12);
@@ -341,15 +347,26 @@ export async function gerarPdf(itens, imagens, meta) {
   doc.titulo("Medições");
   doc.paragrafo("Demandas contratadas e medidas (kW) e consumos de energia (kWh) em cada mês, conforme as faturas.");
   for (const { unidade, analise } of completos) {
+    // Título, notas e tabela da unidade ficam juntos na mesma página
+    doc.garantirEspaco((analise.linhas.length + 1) * 7 + 30);
     doc.subtitulo(nome(unidade), 11);
+    const mesesHistorico = analise.linhas.filter((l) => l.historico).map((l) => l.mes);
+    if (mesesHistorico.length) {
+      doc.paragrafo(`Meses do histórico da fatura (sem demanda contratada informada): ${mesesHistorico.join(", ")}.`,
+        { tamanho: 8.5, cor: SUAVE, depois: 1 });
+    }
     doc.paragrafo(`Tarifa ${unidade.modalidade}.`, { tamanho: 9, cor: SUAVE, depois: 1 });
     const azul = unidade.modalidade === "Azul";
+    // Na verde, a medida na ponta aparece quando a fatura a informa (Enel)
+    const pontaNaVerde = !azul && analise.linhas.some((l) => l.medida_p != null);
     const cabecalho = [...(azul
       ? ["Mês", "Contratada ponta (kW)", "Medida ponta (kW)", "Contratada fora ponta (kW)", "Medida fora ponta (kW)"]
-      : ["Mês", "Contratada (kW)", "Medida (kW)"]), "Consumo ponta (kWh)", "Consumo fora ponta (kWh)"];
+      : ["Mês", "Contratada (kW)", pontaNaVerde ? "Medida, maior do mês (kW)" : "Medida (kW)", ...(pontaNaVerde ? ["Medida ponta (kW)"] : [])]),
+    "Consumo ponta (kWh)", "Consumo fora ponta (kWh)"];
     const linhas = analise.linhas.map((l) => [...(azul
       ? [l.mes, numero(l.contratada_p, 1), numero(l.medida_p, 1), numero(l.contratada, 1), numero(l.medida, 1)]
-      : [l.mes, numero(l.contratada, 1), numero(l.medida, 1)]), numero(l.consumo_p), numero(l.consumo_fp)]);
+      : [l.mes, numero(l.contratada, 1), numero(l.medida, 1), ...(pontaNaVerde ? [numero(l.medida_p, 1)] : [])]),
+    numero(l.consumo_p), numero(l.consumo_fp)]);
     doc.tabela(cabecalho, linhas, { alinharDireita: cabecalho.map((_, i) => i).slice(1) });
   }
 
@@ -360,7 +377,8 @@ export async function gerarPdf(itens, imagens, meta) {
   completos.forEach(({ unidade, analise, indice }, n) => {
     if (n > 0) doc.novaPagina();
     doc.subtitulo(`4.${n + 1}. ${nome(unidade)}`, 13);
-    doc.paragrafo(`Tarifa ${unidade.modalidade} · ${plural(analise.meses.length, "mês analisado", "meses analisados")} ` +
+    doc.paragrafo(`${unidade.distribuidora ? `${unidade.distribuidora} · ` : ""}${unidade.subgrupo ? `Subgrupo ${unidade.subgrupo} · ` : ""}` +
+      `Tarifa ${unidade.modalidade} · ${plural(analise.meses.length, "mês analisado", "meses analisados")} ` +
       `(${analise.meses[0]} a ${analise.meses.at(-1)}) · economia estimada de ${reais(analise.economia)}.`, { cor: SUAVE, tamanho: 9.5 });
     const postos = Object.entries(analise.resultados);
     const comp = analise.comparacao;

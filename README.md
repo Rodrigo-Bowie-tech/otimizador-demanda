@@ -1,6 +1,6 @@
 # Otimizador de Demanda Contratada
 
-Programa que lê contas de energia do Grupo A (Light, Energisa, Enel), em tarifa verde ou azul,
+Programa que lê contas de energia do Grupo A (Light, Enel e Energisa), em tarifa verde ou azul,
 e calcula a demanda contratada que resulta no menor custo, considerando as multas de ultrapassagem
 (REN ANEEL 1000/2021).
 
@@ -47,4 +47,5 @@ Veja `versao-python/README.md`.
 
 ## Pendências
 
-- Leitor calibrado com faturas agrupadas da Light (2024). Falta calibrar com contas reais da Energisa e da Enel.
+- Leitor calibrado com faturas agrupadas da Light (2024) e da Enel (2024). Da Energisa, só foram vistas contas do
+  Grupo B (baixa tensão, sem demanda): falta uma conta do Grupo A da Energisa para calibrar esse formato.

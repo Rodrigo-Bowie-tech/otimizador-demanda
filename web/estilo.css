@@ -164,3 +164,20 @@ table.comparacao td:not(:first-child), table.comparacao th:not(:first-child) { t
 tr.melhor td { background: var(--verde-claro); font-weight: 600; }
 table.comparacao td, table.comparacao th { white-space: normal; }
 table.comparacao td:nth-child(2) { min-width: 120px; }
+
+/* Filtro por distribuidora */
+.filtros { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 4px; }
+.filtro { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px 12px; }
+.filtro span { font-size: 0.8rem; color: var(--tinta-suave); }
+.filtro[aria-pressed="true"] { border-color: var(--verde); background: var(--verde-claro); }
+h4 { margin: 12px 0 4px; }
+@media (max-width: 560px) {
+  /* No celular, cada opção da comparação de modalidades vira um cartão */
+  table.comparacao thead { display: none; }
+  table.comparacao tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 10px 12px; border-bottom: 1px solid var(--borda); }
+  table.comparacao td { border: 0; padding: 0; text-align: left !important; min-width: 0; }
+  table.comparacao td:first-child { grid-column: 1 / -1; font-weight: 600; }
+  table.comparacao td[data-rotulo]::before { content: attr(data-rotulo); display: block; font-size: 0.75rem; font-weight: 400; color: var(--tinta-suave); }
+  table.comparacao td:last-child { font-weight: 700; }
+  tr.melhor, tr.melhor td { background: var(--verde-claro); }
+}

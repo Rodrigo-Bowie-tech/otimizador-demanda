@@ -40,7 +40,8 @@ Veja `versao-python/README.md`.
 | `web/calculo.js` | Regras de faturamento e busca da demanda ótima |
 | `web/leitor_pdf.js` | Extração dos dados das contas em PDF |
 | `web/graficos.js` | Gráficos da tela de resultado |
-| `web/relatorio.js` | Relatório em Excel |
+| `web/relatorio.js` | Planilha Excel com todas as unidades |
+| `web/relatorio_pdf.js` | Relatório em PDF (introdução, metodologia, medições, análises, conclusão) |
 | `VERSAO`, `NOVIDADES.md` | Versão atual e histórico de mudanças |
 | `versao-python/` | Versão antiga em Python (arquivada) |
 

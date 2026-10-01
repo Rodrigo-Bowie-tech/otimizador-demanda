@@ -151,3 +151,5 @@ tr.selecionada, tr.selecionada td { background: var(--verde-claro); }
   table.resumo td:nth-child(3), table.resumo td:nth-child(5) { text-align: right; }
   table.resumo td:nth-child(4) { font-weight: 600; color: var(--verde); }
 }
+
+.grafico-economia { height: 320px; margin-bottom: 12px; }

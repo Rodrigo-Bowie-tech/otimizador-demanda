@@ -3,8 +3,8 @@
 // Uma análise pode ter várias unidades consumidoras (UCs): as faturas agrupadas
 // trazem uma UC por página. Cada UC tem sua modalidade, tarifas e meses.
 
-import { analisarPosto, DEMANDA_MINIMA } from "./calculo.js";
-import { desenhar as desenharFigura, figCurvaDeCusto, figCustoPorMes, figDemandaPorMes, figEconomiaPorUnidade,
+import { analisarPosto, compararModalidades, DEMANDA_MINIMA } from "./calculo.js";
+import { desenhar as desenharFigura, figCurvaDeCusto, figCustoPorMes, figComparacaoModalidades, figDemandaPorMes, figEconomiaPorUnidade,
   imagensDosRelatorios } from "./graficos.js";
 import { lerPdf } from "./leitor_pdf.js";
 import { gerarExcel } from "./relatorio.js";
@@ -17,6 +17,11 @@ const CHAVE_ARMAZENAMENTO = "estado-v2";
 // Dados de exemplo (valores ilustrativos) para conhecer o programa
 const EXEMPLO_MEDIDA = [410, 435, 460, 420, 380, 350, 340, 355, 390, 425, 450, 470];
 const EXEMPLO_PONTA = [280, 300, 310, 290, 260, 240, 230, 245, 270, 295, 305, 320];
+// Tarifas ilustrativas (com tributos) para comparar as modalidades no exemplo
+const TARIFAS_EXEMPLO = {
+  Verde: { demanda: 35, energia_p: 1.7, energia_fp: 0.52 },
+  Azul: { demanda_p: 90, demanda_fp: 35, energia_p: 0.71, energia_fp: 0.52 },
+};
 
 // Colunas da tabela de conferência. Na tarifa verde só "contratada" e "medida" são usadas;
 // na azul elas representam o "fora de ponta".
@@ -26,8 +31,17 @@ const ROTULOS = {
   medida: "Medida (kW)",
   contratada_p: "Contratada ponta (kW)",
   medida_p: "Medida ponta (kW)",
+  consumo_p: "Consumo ponta (kWh)",
+  consumo_fp: "Consumo fora ponta (kWh)",
 };
-const CAMPOS_DEMANDA = ["contratada", "medida", "contratada_p", "medida_p"];
+const CAMPOS_DEMANDA = ["contratada", "medida", "contratada_p", "medida_p", "consumo_p", "consumo_fp"];
+const AJUDA_CONSUMO = "Energia consumida no mês (kWh). Serve para comparar as modalidades verde e azul.";
+// Tarifas com tributos usadas para comparar as modalidades
+const CAMPOS_TARIFAS = {
+  Verde: [["demanda", "Demanda (R$/kW)"], ["energia_p", "Energia na ponta (R$/kWh)"], ["energia_fp", "Energia fora de ponta (R$/kWh)"]],
+  Azul: [["demanda_p", "Demanda na ponta (R$/kW)"], ["demanda_fp", "Demanda fora de ponta (R$/kW)"],
+    ["energia_p", "Energia na ponta (R$/kWh)"], ["energia_fp", "Energia fora de ponta (R$/kWh)"]],
+};
 const AJUDA_CONTRATADA = "Valor de demanda que consta no contrato com a distribuidora naquele mês.";
 const AJUDA_MEDIDA = "Maior demanda registrada pelo medidor no mês (também chamada de demanda registrada ou lida).";
 
@@ -38,7 +52,7 @@ let arquivosEscolhidos = [];
 // ---------------------------------------------------------------- utilidades
 
 function novoEstado() {
-  return { etapa: 1, leituras: [], unidades: [], atual: 0, crescimento: 0 };
+  return { etapa: 1, leituras: [], unidades: [], atual: 0, crescimento: 0, tarifasRef: { Verde: {}, Azul: {} } };
 }
 
 function novaUnidade(id, rotulo) {
@@ -117,7 +131,25 @@ function irPara(etapa) {
 }
 
 function linhaVazia(mes = "", arquivo = "digitado") {
-  return { mes, arquivo, contratada: null, medida: null, contratada_p: null, medida_p: null };
+  return { mes, arquivo, contratada: null, medida: null, contratada_p: null, medida_p: null, consumo_p: null, consumo_fp: null };
+}
+
+/**
+ * Tarifas de cada modalidade para a comparação verde x azul, tiradas das contas mais recentes
+ * de cada modalidade (numa fatura agrupada costuma haver unidades nas duas).
+ */
+function tarifasDasLeituras(leituras) {
+  const tarifas = { Verde: {}, Azul: {} };
+  const mes = { Verde: -1, Azul: -1 };
+  for (const conta of leituras.flatMap((l) => l.contas)) {
+    const m = conta.modalidade;
+    if (!tarifas[m] || ordemDoMes(conta.mes) < mes[m] || !conta.tarifa || !conta.energia_fp) continue;
+    mes[m] = ordemDoMes(conta.mes);
+    tarifas[m] = m === "Verde"
+      ? { demanda: conta.tarifa, energia_p: conta.energia_p, energia_fp: conta.energia_fp, mes: conta.mes }
+      : { demanda_p: conta.tarifa_p, demanda_fp: conta.tarifa, energia_p: conta.energia_p, energia_fp: conta.energia_fp, mes: conta.mes };
+  }
+  return tarifas;
 }
 
 /** Agrupa as contas lidas dos PDFs por unidade consumidora (número da instalação). */
@@ -146,6 +178,7 @@ function unidadesDasLeituras(leituras) {
       if (ordem >= u.mesMaisRecente) {
         u.mesMaisRecente = ordem;
         if (conta.modalidade) u.modalidade = conta.modalidade;
+        if (conta.subgrupo) u.subgrupo = conta.subgrupo;
         if (conta.tarifa) Object.assign(u, { tarifa: arredondar2(conta.tarifa), tarifasDaConta: true });
         if (conta.tarifa_p) u.tarifa_p = arredondar2(conta.tarifa_p);
       }
@@ -224,6 +257,7 @@ function etapaEnviar() {
     }
     estado.leituras = leituras;
     estado.unidades = unidadesDasLeituras(leituras);
+    estado.tarifasRef = tarifasDasLeituras(leituras);
     estado.atual = 0;
     irPara(2);
   });
@@ -240,7 +274,9 @@ function etapaEnviar() {
     const unidade = novaUnidade("exemplo", "Exemplo");
     unidade.linhas = ultimosMeses().map((mes, i) => ({
       mes, arquivo: "exemplo", contratada: 500, medida: EXEMPLO_MEDIDA[i], contratada_p: 250, medida_p: EXEMPLO_PONTA[i],
+      consumo_p: EXEMPLO_PONTA[i] * 45, consumo_fp: EXEMPLO_MEDIDA[i] * 280,
     }));
+    estado.tarifasRef = structuredClone(TARIFAS_EXEMPLO);
     estado.unidades = [unidade];
     estado.atual = 0;
     irPara(2);
@@ -292,7 +328,8 @@ function htmlSeletorUnidade() {
 }
 
 function colunasVisiveis(azul) {
-  return azul ? ["mes", "contratada_p", "medida_p", "contratada", "medida"] : ["mes", "contratada", "medida"];
+  const demanda = azul ? ["contratada_p", "medida_p", "contratada", "medida"] : ["contratada", "medida"];
+  return ["mes", ...demanda, "consumo_p", "consumo_fp"];
 }
 
 function rotulo(coluna, azul) {
@@ -304,7 +341,7 @@ function rotulo(coluna, azul) {
 function htmlTabela(linhasDaTabela, azul) {
   const colunas = colunasVisiveis(azul);
   const ajuda = (c) => (c === "mes" ? "Mês de referência da conta, no formato MM/AAAA."
-    : c.startsWith("contratada") ? AJUDA_CONTRATADA : AJUDA_MEDIDA);
+    : c.startsWith("contratada") ? AJUDA_CONTRATADA : c.startsWith("consumo") ? AJUDA_CONSUMO : AJUDA_MEDIDA);
   const cabecalho = colunas.map((c) => `<th title="${ajuda(c)}">${rotulo(c, azul)}</th>`).join("");
   const linhas = linhasDaTabela.map((linha, i) => `
     <tr>
@@ -323,6 +360,32 @@ function htmlTabela(linhasDaTabela, azul) {
       </table>
     </div>
     <button id="adicionar" class="pequeno">＋ Adicionar mês</button>`;
+}
+
+/** Tarifas das duas modalidades, usadas para dizer se vale a pena trocar de modalidade. */
+function htmlTarifasModalidades() {
+  const tarifas = estado.tarifasRef ?? { Verde: {}, Azul: {} };
+  const lidas = ["Verde", "Azul"].filter((m) => tarifas[m]?.mes);
+  const origem = lidas.length
+    ? `Preenchidas com as contas mais recentes (${lidas.map((m) => `${m}: ${tarifas[m].mes}`).join("; ")}). Confira se quiser.`
+    : "Preencha com os preços com tributos de uma conta de cada modalidade, da mesma distribuidora e subgrupo.";
+  const faltam = ["Verde", "Azul"].filter((m) => CAMPOS_TARIFAS[m].some(([c]) => !(tarifas[m]?.[c] > 0)));
+  const grupo = (modalidade) => `
+    <fieldset class="tarifas-modalidade">
+      <legend>Tarifa ${modalidade}</legend>
+      ${CAMPOS_TARIFAS[modalidade].map(([campo, rotuloCampo]) => `
+        <label class="campo">${rotuloCampo}
+          <input data-tarifa-modalidade="${modalidade}.${campo}" inputmode="decimal"
+            value="${mostrarNumero(tarifas[modalidade]?.[campo] != null ? Math.round(tarifas[modalidade][campo] * 1e6) / 1e6 : null)}"></label>`).join("")}
+    </fieldset>`;
+  return `
+    <details class="caixa" ${faltam.length ? "open" : ""}>
+      <summary>⚖️ Comparar as modalidades verde e azul${faltam.length ? ` — faltam tarifas da ${faltam.join(" e da ")}` : ""}</summary>
+      <p class="legenda">O app calcula o custo de demanda <strong>e de energia</strong> nas duas modalidades, cada uma com a demanda
+        contratada ideal, e diz qual sai mais barata. Para isso usa os consumos (kWh) da tabela e as tarifas abaixo, com tributos.
+        ${origem}</p>
+      <div class="dupla">${grupo("Verde")}${grupo("Azul")}</div>
+    </details>`;
 }
 
 /** Limpa as linhas e devolve [linhas, lista de erros]. */
@@ -401,6 +464,8 @@ function etapaConferir() {
         Ex.: 10 = a demanda vai crescer 10% em relação aos meses da tabela.${estado.unidades.length > 1 ? " Vale para todas as unidades." : ""}</span>
     </label>
 
+    ${htmlTarifasModalidades()}
+
     <div id="erros"></div>
     <div class="dupla">
       <button id="voltar">⬅ Voltar</button>
@@ -454,6 +519,14 @@ function etapaConferir() {
     salvarEstado();
   }
   for (const id of ["tarifa", "tarifa_p", "crescimento"]) document.getElementById(id)?.addEventListener("input", lerParametros);
+  for (const campo of conteudo.querySelectorAll("[data-tarifa-modalidade]")) {
+    campo.addEventListener("input", () => {
+      const [modalidade, chave] = campo.dataset.tarifaModalidade.split(".");
+      estado.tarifasRef ??= { Verde: {}, Azul: {} };
+      estado.tarifasRef[modalidade][chave] = lerNumero(campo.value);
+      salvarEstado();
+    });
+  }
 
   document.getElementById("voltar").addEventListener("click", () => irPara(1));
   document.getElementById("calcular").addEventListener("click", () => {
@@ -512,8 +585,72 @@ function analisarUnidade(u) {
   const resultados = u.modalidade === "Azul"
     ? { "Ponta": analisar("medida_p", "contratada_p", u.tarifa_p), "Fora de ponta": analisar("medida", "contratada", u.tarifa) }
     : { "Demanda": analisar("medida", "contratada", u.tarifa) };
-  const economia = Object.values(resultados).reduce((total, r) => total + r.economia, 0);
-  return { resultados, meses: linhas.map((l) => l.mes), linhas, economia };
+  const economiaDemanda = Object.values(resultados).reduce((total, r) => total + r.economia, 0);
+  // Verde x azul: custo de demanda + energia de cada modalidade, com a demanda ideal de cada uma
+  const comparacao = compararModalidades(linhas, estado.tarifasRef ?? {}, { modalidadeAtual: u.modalidade, subgrupo: u.subgrupo, fator });
+  const trocar = comparacao.disponivel && comparacao.melhor !== u.modalidade;
+  return {
+    resultados, meses: linhas.map((l) => l.mes), linhas, comparacao, trocar, economiaDemanda,
+    modalidadeRecomendada: trocar ? comparacao.melhor : u.modalidade,
+    // Economia da melhor opção: trocar de modalidade, ou só ajustar a demanda na modalidade atual
+    economia: trocar ? comparacao.economia : economiaDemanda,
+  };
+}
+
+/** Contratos recomendados: [[posto, kW]] na modalidade recomendada. */
+function contratosRecomendados(a) {
+  return a.trocar
+    ? Object.entries(a.comparacao.opcoes[a.comparacao.melhor].postos).map(([posto, p]) => [posto, p.contratada])
+    : Object.entries(a.resultados).map(([posto, r]) => [posto, r.otima]);
+}
+
+const textoContratos = (contratos) => (contratos.length > 1
+  ? contratos.map(([posto, valor]) => `${posto.toLowerCase()} ${kw(valor)}`).join(" e ")
+  : kw(contratos[0][1]));
+
+/** Quadro "Modalidade tarifária": situação atual x verde x azul, cada uma com a demanda ideal. */
+function htmlModalidade(u, a) {
+  const comp = a.comparacao;
+  if (!comp.disponivel) {
+    return `<div class="aviso info">⚖️ <strong>Modalidade tarifária:</strong> não foi possível comparar verde e azul.
+      ${escapar(comp.motivo)} <button class="pequeno" id="ir-tarifas">Completar na etapa 2</button></div>`;
+  }
+  const ultima = (campo) => a.linhas.map((l) => l[campo]).filter((v) => v != null).at(-1);
+  const contratosAtuais = u.modalidade === "Azul"
+    ? `ponta ${kw(ultima("contratada_p"))}, fora de ponta ${kw(ultima("contratada"))}` : kw(ultima("contratada"));
+  const linha = (nome, contratos, v, melhor) => `<tr class="${melhor ? "melhor" : ""}"><td>${nome}</td><td>${contratos}</td>
+    <td>${reais(v.custoDemanda)}</td><td>${reais(v.custoEnergia)}</td><td>${reais(v.total)}</td></tr>`;
+  const opcoes = Object.entries(comp.opcoes).map(([m, v]) => linha(`${m} com a demanda ideal`,
+    textoContratos(Object.entries(v.postos).map(([posto, p]) => [posto, p.contratada])), v, m === comp.melhor)).join("");
+  const notas = [];
+  if (!comp.verdePermitida) notas.push(`O subgrupo ${escapar(u.subgrupo)} não pode optar pela tarifa verde.`);
+  if (comp.faltaOutraModalidade) {
+    notas.push(`Faltam as tarifas da modalidade ${u.modalidade === "Azul" ? "verde" : "azul"} para comparar. Preencha-as na etapa 2.`);
+  }
+  if (comp.pontaEstimada && comp.opcoes.Azul) {
+    notas.push("Na tarifa verde a demanda na ponta não é medida separadamente; para simular a azul ela foi considerada igual à " +
+      "demanda máxima do mês. Por isso, a simulação da azul é conservadora.");
+  }
+  const conclusao = a.trocar
+    ? `<strong>Vale a pena trocar para a tarifa ${comp.melhor}:</strong> com a demanda ideal, o custo no período cai de
+        ${reais(comp.atual.total)} para ${reais(comp.opcoes[comp.melhor].total)}.`
+    : comp.diferencaEntreModalidades != null
+      ? `<strong>A tarifa ${u.modalidade} atual é a mais econômica:</strong> a ${u.modalidade === "Azul" ? "verde" : "azul"}
+          custaria ${reais(comp.diferencaEntreModalidades)} a mais no período, mesmo com a demanda ideal.`
+      : `<strong>Tarifa ${u.modalidade}.</strong>`;
+  return `
+    <div class="modalidade-card">
+      <h3>⚖️ Modalidade tarifária</h3>
+      <p>${conclusao}</p>
+      <div class="tabela-rolagem">
+        <table class="comparacao">
+          <thead><tr><th>Opção</th><th>Demanda contratada</th><th>Custo de demanda</th><th>Custo de energia</th><th>Total no período</th></tr></thead>
+          <tbody>${linha(`Hoje (${u.modalidade})`, contratosAtuais, comp.atual, false)}${opcoes}</tbody>
+        </table>
+      </div>
+      <div class="grafico" id="grafico-modalidade"></div>
+      ${notas.map((n) => `<p class="legenda">${n}</p>`).join("")}
+    </div>`;
 }
 
 function fraseRecomendacao(nome, r) {
@@ -545,19 +682,25 @@ function htmlResumo(analises) {
       return `<tr${atual}><td>${escapar(u.rotulo)}</td><td>${u.modalidade}</td><td colspan="2">Dados incompletos</td>
         <td><button class="pequeno" data-corrigir="${i}">Corrigir</button></td></tr>`;
     }
-    const mudanca = Object.entries(a.resultados).map(([nome, r]) =>
-      `${a.resultados.Ponta ? `${nome}: ` : ""}${kw(r.atual)} → <strong>${kw(r.otima)}</strong>`).join("<br>");
-    return `<tr${atual}><td>${escapar(u.rotulo)}</td><td>${u.modalidade}</td><td>${mudanca}</td>
+    const contratos = contratosRecomendados(a);
+    const mudanca = a.trocar
+      ? contratos.map(([nome, valor]) => `${contratos.length > 1 ? `${nome}: ` : ""}<strong>${kw(valor)}</strong>`).join("<br>")
+      : Object.entries(a.resultados).map(([nome, r]) =>
+        `${a.resultados.Ponta ? `${nome}: ` : ""}${kw(r.atual)} → <strong>${kw(r.otima)}</strong>`).join("<br>");
+    const modalidade = a.trocar ? `${u.modalidade} → <strong>${a.modalidadeRecomendada}</strong>` : u.modalidade;
+    return `<tr${atual}><td>${escapar(u.rotulo)}</td><td>${modalidade}</td><td>${mudanca}</td>
       <td>${a.economia > 0.5 ? reais(a.economia) : "—"}</td>
       <td><button class="pequeno" data-ver="${i}">${i === estado.atual ? "Exibindo" : "Ver"}</button></td></tr>`;
   }).join("");
   return `
     <h2>Todas as unidades</h2>
     <p>Economia estimada somando todas: <strong>${reais(total)}</strong> no período analisado.</p>
+    ${analises.some((a) => a?.trocar) ? `<p class="legenda">Nas unidades em que vale a pena trocar de modalidade, a economia
+      considera demanda e energia; nas demais, só o ajuste de demanda.</p>` : ""}
     <div class="grafico grafico-economia" id="grafico-economia"></div>
     <div class="tabela-rolagem">
       <table class="resumo">
-        <thead><tr><th>Unidade</th><th>Modalidade</th><th>Contratada atual → recomendada</th><th>Economia</th><th></th></tr></thead>
+        <thead><tr><th>Unidade</th><th>Modalidade</th><th>Demanda contratada recomendada</th><th>Economia</th><th></th></tr></thead>
         <tbody>${linhas}</tbody>
       </table>
     </div>
@@ -629,15 +772,22 @@ function etapaResultado() {
   const u = unidadeAtual();
   const analise = analises[estado.atual];
   if (!analise) return irPara(2); // dados da unidade escolhida ficaram incompletos
-  const { resultados, meses, economia } = analise;
+  const { resultados, meses, economiaDemanda, comparacao } = analise;
   const postos = Object.entries(resultados);
   const varias = estado.unidades.length > 1;
 
-  const destaque = economia > 0.5
-    ? `<div class="aviso sucesso"><h2>💡 Economia estimada de ${reais(economia)}</h2>
-        <p>nos ${meses.length} meses analisados (${meses[0]} a ${meses.at(-1)}), ajustando a demanda contratada:</p>`
-    : `<div class="aviso info"><h2>👍 A demanda contratada já está no valor mais econômico</h2>
-        <p>Não há ajuste que reduza o custo no período analisado.</p>`;
+  const periodo = `nos ${meses.length} meses analisados (${meses[0]} a ${meses.at(-1)})`;
+  const destaque = analise.trocar
+    ? `<div class="aviso sucesso"><h2>💡 Trocar para a tarifa ${comparacao.melhor}: economia de ${reais(comparacao.economia)}</h2>
+        <p>${periodo}, somando demanda e energia, contratando ${textoContratos(contratosRecomendados(analise))}.</p>
+        <ul><li>Só ajustando a demanda e mantendo a tarifa ${u.modalidade}, a economia seria de ${reais(economiaDemanda)}
+          (detalhes abaixo).</li></ul></div>`
+    : `${economiaDemanda > 0.5
+      ? `<div class="aviso sucesso"><h2>💡 Economia estimada de ${reais(economiaDemanda)}</h2>
+          <p>${periodo}, ajustando a demanda contratada:</p>`
+      : `<div class="aviso info"><h2>👍 A demanda contratada já está no valor mais econômico</h2>
+          <p>Não há ajuste que reduza o custo no período analisado.</p>`}
+        <ul>${postos.map(([nome, r]) => `<li>${fraseRecomendacao(nome, r)}</li>`).join("")}</ul></div>`;
   const avisos = [];
   if (meses.length < 12) {
     avisos.push(`<div class="aviso alerta">📅 A análise usou só ${meses.length} ${meses.length === 1 ? "mês" : "meses"}. Com menos de 12,
@@ -655,10 +805,11 @@ function etapaResultado() {
     ${varias ? htmlResumo(analises) : ""}
     ${varias ? `<h2 id="unidade-titulo">${escapar(u.rotulo)}</h2><p class="legenda">Tarifa ${u.modalidade}</p>` : ""}
     ${destaque}
-      <ul>${postos.map(([nome, r]) => `<li>${fraseRecomendacao(nome, r)}</li>`).join("")}</ul>
-    </div>
     ${avisos.join("")}
+    ${htmlModalidade(u, analise)}
     <hr>
+    <h2>${analise.trocar ? `Se mantiver a tarifa ${u.modalidade}: ajuste de demanda` : "Ajuste de demanda"}</h2>
+    ${analise.trocar ? `<ul class="frases">${postos.map(([nome, r]) => `<li>${fraseRecomendacao(nome, r)}</li>`).join("")}</ul>` : ""}
     ${abas}
     ${postos.map(([, r], i) => `<section class="posto" data-posto="${i}" ${i ? "hidden" : ""}>${htmlPosto(i, meses, r)}</section>`).join("")}
     <hr>
@@ -671,7 +822,9 @@ function etapaResultado() {
     <details class="caixa">
       <summary>ℹ️ Antes de pedir a alteração à distribuidora</summary>
       <ul>
-        <li>A análise considera apenas a <strong>parcela de demanda</strong> da conta, não o consumo em kWh.</li>
+        <li>O ajuste de demanda considera a <strong>parcela de demanda</strong> da conta; a comparação de modalidades
+          considera também a <strong>energia</strong> (kWh), com as tarifas da etapa 2.</li>
+        <li>A troca de modalidade é pedida à distribuidora; confirme as condições e prazos para a mudança.</li>
         <li>Confirme com a distribuidora os <strong>prazos e condições</strong> para alterar o contrato:
           reduções costumam ter regras de antecedência e carência.</li>
         <li>Se houver previsão de <strong>novos equipamentos ou expansão</strong>, volte à etapa anterior e informe
@@ -706,6 +859,10 @@ function etapaResultado() {
     elemento.style.height = `${Math.max(220, 46 * dados.length + 80)}px`;
     desenharFigura(elemento, figEconomiaPorUnidade(dados)).catch((erro) => console.error(erro));
   }
+  if (comparacao.disponivel) {
+    desenharFigura(document.getElementById("grafico-modalidade"), figComparacaoModalidades(comparacao)).catch((erro) => console.error(erro));
+  }
+  document.getElementById("ir-tarifas")?.addEventListener("click", () => irPara(2));
   const desenhados = new Set([0]);
   desenharGraficos(0, meses, postos[0][1]);
   for (const aba of conteudo.querySelectorAll("[data-aba]")) {

@@ -130,10 +130,15 @@ export function lerPaginaLight(pagina) {
     instalacao,
     endereco,
     modalidade: ({ AZUL: "Azul", VERDE: "Verde" })[linhas[inicio].match(/\b(AZUL|VERDE)\b/)?.[1]] ?? null,
+    subgrupo: linhas[inicio].match(/^GRUPO (A\d[A-Z]?|AS)\b/)?.[1] ?? null,
     mes: null,
     contratada: null, medida: null, contratada_p: null, medida_p: null,
+    consumo_p: null, consumo_fp: null,
     tarifa: null, tarifa_p: null,
+    // Preços por kWh com tributos (servem para comparar as modalidades)
+    energia_p: null, energia_fp: null,
   };
+  const consumoMedidor = { p: null, fp: null };
 
   // Mês de referência: linha "FEV/2024 25/03/2024 R$8.548,72"
   const mes = texto.match(/^(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)\/(\d{4}) \d{2}\/\d{2}\/\d{4}/m);
@@ -159,6 +164,24 @@ export function lerPaginaLight(pagina) {
     // Tarifa de demanda (preço unitário com tributos): "Demanda Ativa kW HFP/Único kW 160 24,46831364 ..."
     const tarifa = linha.match(/^DEMANDA ATIVA KW (HFP\/[ÚU]NICO|HP) KW [\d.]+ ([\d.]+,\d+)/);
     if (tarifa) conta[tarifa[1] === "HP" ? "tarifa_p" : "tarifa"] = numeroBr(tarifa[2]);
+    // Energia faturada (kWh) e preço com tributos: "Energia Ativa kWh HP kWh 371 0,74344791 ..."
+    const energia = linha.match(/^ENERGIA ATIVA KWH (HFP\/[ÚU]NICO|HP) KWH ([\d.]+) ([\d.]+,\d+)/);
+    if (energia) {
+      const posto = energia[1] === "HP" ? "p" : "fp";
+      conta[`consumo_${posto}`] = (conta[`consumo_${posto}`] ?? 0) + numeroBr(energia[2]);
+      conta[`energia_${posto}`] = numeroBr(energia[3]);
+    }
+    // Consumo do medidor, usado se a fatura não trouxer o item de energia
+    const medidorEnergia = linha.match(/ENERGIA ATIVA-KWH (FORA PONTA|PONTA)\b.* [\d.]+$/);
+    if (medidorEnergia) {
+      const posto = medidorEnergia[1] === "PONTA" ? "p" : "fp";
+      consumoMedidor[posto] = (consumoMedidor[posto] ?? 0) + numeroNoFim(linha);
+    }
+  }
+  for (const posto of ["p", "fp"]) {
+    if (conta[`consumo_${posto}`] == null && consumoMedidor[posto] != null) {
+      conta[`consumo_${posto}`] = Math.round(consumoMedidor[posto] * fatorPerda);
+    }
   }
   for (const campo of ["medida", "medida_p"]) {
     if (conta[campo] != null) conta[campo] = Math.round(conta[campo] * fatorPerda * 10) / 10;

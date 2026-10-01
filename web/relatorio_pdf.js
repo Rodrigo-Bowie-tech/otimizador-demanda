@@ -118,7 +118,7 @@ class Documento {
     this.y += 1.5;
   }
 
-  tabela(cabecalho, linhas, { destacar = () => false, alinharDireita = [], larguras, rodape, largura } = {}) {
+  tabela(cabecalho, linhas, { destacar = () => false, alinharDireita = [], larguras, rodape, largura, corDestaque = FUNDO_MULTA } = {}) {
     // Tabelas pequenas não são partidas entre páginas
     const alturaEstimada = (linhas.length + (rodape ? 2 : 1)) * 7 + 6;
     if (alturaEstimada < 180) this.garantirEspaco(alturaEstimada);
@@ -139,7 +139,7 @@ class Documento {
       tableWidth: largura ?? "auto",
       rowPageBreak: "avoid",
       didParseCell: (dado) => {
-        if (dado.section === "body" && destacar(dado.row.index)) dado.cell.styles.fillColor = FUNDO_MULTA;
+        if (dado.section === "body" && destacar(dado.row.index)) dado.cell.styles.fillColor = corDestaque;
         if (dado.section !== "body" && alinharDireita.includes(dado.column.index)) dado.cell.styles.halign = "right";
       },
     });
@@ -205,6 +205,19 @@ function recomendacao(nome, r) {
 
 const acao = (r) => (r.otima < r.atual ? "Reduzir" : r.otima > r.atual ? "Aumentar" : "Manter");
 
+/** Demanda contratada (texto) de uma lista [[posto, kW]]. */
+const textoContratos = (postos) => postos.map(([posto, valor]) => `${postos.length > 1 ? `${posto.toLowerCase()} ` : ""}${kw(valor)}`).join(" e ");
+
+function contratosRecomendados(analise) {
+  return analise.trocar
+    ? Object.entries(analise.comparacao.opcoes[analise.comparacao.melhor].postos).map(([posto, p]) => [posto, p.contratada])
+    : Object.entries(analise.resultados).map(([posto, r]) => [posto, r.otima]);
+}
+
+function contratosAtuais(unidade, analise) {
+  return Object.entries(analise.resultados).map(([posto, r]) => [posto, r.atual]);
+}
+
 // ---------------------------------------------------------------- relatório
 
 /**
@@ -222,6 +235,7 @@ export async function gerarPdf(itens, imagens, meta) {
   const periodo = todosMeses.length ? `${todosMeses[0]} a ${todosMeses.at(-1)}` : "-";
   const economiaTotal = completos.reduce((s, i) => s + i.analise.economia, 0);
   const custoAtualTotal = completos.reduce((s, i) => s + Object.values(i.analise.resultados).reduce((t, r) => t + r.custoAtual, 0), 0);
+  const trocas = completos.filter((i) => i.analise.trocar);
   const multasTotal = completos.reduce((s, i) => s + Object.values(i.analise.resultados).reduce((t, r) => t + r.multaAtual, 0), 0);
   const variasUnidades = itens.length > 1;
   const nome = (u) => u.rotulo;
@@ -242,7 +256,8 @@ export async function gerarPdf(itens, imagens, meta) {
     ["Distribuidora", meta.distribuidoras?.join(", ") || "-"],
     ["Custo de demanda no período (contrato atual)", reais(custoAtualTotal)],
     ["Multas de ultrapassagem com os contratos atuais", reais(multasTotal)],
-    ["Economia estimada com os valores recomendados", reais(economiaTotal), true],
+    ["Unidades em que vale trocar de modalidade", String(trocas.length)],
+    ["Economia estimada com as recomendações", reais(economiaTotal), true],
   ]);
   doc.fonte(11, "bold");
   pdf.text("Conteúdo", MARGEM, doc.y + 4);
@@ -295,6 +310,22 @@ export async function gerarPdf(itens, imagens, meta) {
   doc.paragrafo("Para cada unidade (e cada posto horário, na tarifa azul), foram simulados todos os valores inteiros de " +
     "demanda contratada, do mínimo até acima da maior demanda medida, aplicando-se o mesmo valor a todos os meses do período. " +
     "A demanda recomendada é a de menor custo total; em caso de empate, o menor valor.");
+  doc.subtitulo("Escolha da modalidade tarifária", 12);
+  doc.paragrafo("Além do ajuste de demanda, cada unidade foi simulada nas duas modalidades horárias, cada uma com a sua " +
+    "demanda contratada ideal, somando o custo de demanda e o de energia (kWh) do período:");
+  doc.marcadores([
+    "Verde: uma única demanda contratada, cobrada pela maior demanda do mês em qualquer horário; a energia consumida no " +
+      "horário de ponta tem tarifa bem mais alta.",
+    "Azul: demandas contratadas separadas para a ponta (tarifa mais alta) e fora de ponta; a energia na ponta é mais barata " +
+      "que na verde.",
+    "A verde tende a compensar quando a unidade usa pouca demanda e pouca energia no horário de ponta; a azul, quando a " +
+      "demanda e o consumo na ponta são altos.",
+    "Tarifas de energia e de demanda de cada modalidade: preços com tributos das faturas mais recentes de unidades em cada " +
+      "modalidade, da mesma distribuidora (ou informadas pelo usuário).",
+    "Para unidades na verde, a demanda na ponta não é medida separadamente; na simulação da azul ela foi considerada igual à " +
+      "demanda máxima do mês, premissa conservadora que não favorece a azul.",
+    "Só os subgrupos A3a, A4 e AS podem optar pela verde; os demais foram comparados apenas na azul.",
+  ]);
   doc.subtitulo("Premissas", 12);
   doc.marcadores([
     "Demanda medida: valor registrado pelo medidor em cada mês. Quando a fatura informa perda de transformação, a medida " +
@@ -308,18 +339,18 @@ export async function gerarPdf(itens, imagens, meta) {
 
   // ---- 3. Medições
   doc.titulo("Medições");
-  doc.paragrafo("Demandas contratadas e medidas em cada mês, conforme as faturas. Valores em kW.");
+  doc.paragrafo("Demandas contratadas e medidas (kW) e consumos de energia (kWh) em cada mês, conforme as faturas.");
   for (const { unidade, analise } of completos) {
     doc.subtitulo(nome(unidade), 11);
     doc.paragrafo(`Tarifa ${unidade.modalidade}.`, { tamanho: 9, cor: SUAVE, depois: 1 });
     const azul = unidade.modalidade === "Azul";
-    const cabecalho = azul
-      ? ["Mês", "Contratada ponta", "Medida ponta", "Contratada fora ponta", "Medida fora ponta"]
-      : ["Mês", "Contratada", "Medida"];
-    const linhas = analise.linhas.map((l) => azul
+    const cabecalho = [...(azul
+      ? ["Mês", "Contratada ponta (kW)", "Medida ponta (kW)", "Contratada fora ponta (kW)", "Medida fora ponta (kW)"]
+      : ["Mês", "Contratada (kW)", "Medida (kW)"]), "Consumo ponta (kWh)", "Consumo fora ponta (kWh)"];
+    const linhas = analise.linhas.map((l) => [...(azul
       ? [l.mes, numero(l.contratada_p, 1), numero(l.medida_p, 1), numero(l.contratada, 1), numero(l.medida, 1)]
-      : [l.mes, numero(l.contratada, 1), numero(l.medida, 1)]);
-    doc.tabela(cabecalho, linhas, { alinharDireita: azul ? [1, 2, 3, 4] : [1, 2], largura: azul ? LARGURA_UTIL : 100 });
+      : [l.mes, numero(l.contratada, 1), numero(l.medida, 1)]), numero(l.consumo_p), numero(l.consumo_fp)]);
+    doc.tabela(cabecalho, linhas, { alinharDireita: cabecalho.map((_, i) => i).slice(1) });
   }
 
   // ---- 4. Análises
@@ -332,6 +363,33 @@ export async function gerarPdf(itens, imagens, meta) {
     doc.paragrafo(`Tarifa ${unidade.modalidade} · ${plural(analise.meses.length, "mês analisado", "meses analisados")} ` +
       `(${analise.meses[0]} a ${analise.meses.at(-1)}) · economia estimada de ${reais(analise.economia)}.`, { cor: SUAVE, tamanho: 9.5 });
     const postos = Object.entries(analise.resultados);
+    const comp = analise.comparacao;
+    // Modalidade tarifária
+    if (comp?.disponivel) {
+      doc.subtitulo("Modalidade tarifária", 11.5);
+      const outra = unidade.modalidade === "Azul" ? "verde" : "azul";
+      doc.paragrafo(analise.trocar
+        ? `Recomenda-se trocar da tarifa ${unidade.modalidade.toLowerCase()} para a ${comp.melhor.toLowerCase()}, contratando ` +
+          `${textoContratos(contratosRecomendados(analise))}. Somando demanda e energia, o custo no período cai de ` +
+          `${reais(comp.atual.total)} para ${reais(comp.opcoes[comp.melhor].total)}: economia de ${reais(comp.economia)}.`
+        : comp.diferencaEntreModalidades != null
+          ? `A tarifa ${unidade.modalidade.toLowerCase()} atual é a mais econômica: a ${outra} custaria ` +
+            `${reais(comp.diferencaEntreModalidades)} a mais no período, mesmo com a demanda ideal.`
+          : `Tarifa ${unidade.modalidade.toLowerCase()}; a outra modalidade não pôde ser comparada.`);
+      doc.tabela(["Opção", "Demanda contratada", "Custo de demanda", "Custo de energia", "Total no período"], [
+        [`Hoje (${unidade.modalidade})`, textoContratos(contratosAtuais(unidade, analise)), reais(comp.atual.custoDemanda),
+          reais(comp.atual.custoEnergia), reais(comp.atual.total)],
+        ...Object.entries(comp.opcoes).map(([m, v]) => [`${m} com a demanda ideal`,
+          textoContratos(Object.entries(v.postos).map(([posto, p]) => [posto, p.contratada])), reais(v.custoDemanda),
+          reais(v.custoEnergia), reais(v.total)]),
+      ], { alinharDireita: [2, 3, 4], destacar: (i) => i > 0 && Object.keys(comp.opcoes)[i - 1] === comp.melhor, corDestaque: FUNDO_DESTAQUE });
+      const figura = imagens.unidades[indice]?.modalidade;
+      if (figura) doc.grafico(figura, "Custo do período em cada opção: a parte escura é a demanda e a clara, a energia. " +
+        "Em verde, a opção mais barata.");
+      doc.subtitulo(analise.trocar ? `Ajuste de demanda, se mantiver a tarifa ${unidade.modalidade.toLowerCase()}` : "Ajuste de demanda", 11.5);
+    } else if (comp) {
+      doc.paragrafo(`Modalidade tarifária: não foi possível comparar verde e azul. ${comp.motivo}`, { tamanho: 9.5, cor: SUAVE });
+    }
     doc.marcadores(postos.map(([posto, r]) => recomendacao(postos.length > 1 ? posto : "Demanda", r)));
     doc.tabela(
       ["Posto", "Contratada atual", "Recomendada", "Custo atual", "Custo recomendado", "Economia", "Meses com multa hoje"],
@@ -368,12 +426,15 @@ export async function gerarPdf(itens, imagens, meta) {
   doc.titulo("Conclusão e recomendações");
   const comEconomia = completos.filter((i) => i.analise.economia > 0.5);
   doc.paragrafo(comEconomia.length
-    ? `Ajustando a demanda contratada de ${plural(comEconomia.length, "unidade", "unidades")}, a economia estimada é de ` +
-      `${reais(economiaTotal)} no período analisado (${periodo}), o equivalente a ` +
-      `${(economiaTotal / (custoAtualTotal || 1)).toLocaleString("pt-BR", { style: "percent", maximumFractionDigits: 1 })} ` +
-      `do custo de demanda com os contratos atuais. Com esses contratos, as multas de ultrapassagem somariam ` +
-      `${reais(multasTotal)} no período.`
+    ? `Seguindo as recomendações em ${plural(comEconomia.length, "unidade", "unidades")}, a economia estimada é de ` +
+      `${reais(economiaTotal)} no período analisado (${periodo}). Com os contratos atuais, as multas de ultrapassagem ` +
+      `somariam ${reais(multasTotal)} no período.`
     : "Os valores de demanda contratada já são os mais econômicos para o período analisado; não há ajuste que reduza o custo.");
+  if (trocas.length) {
+    doc.paragrafo(`Em ${plural(trocas.length, "unidade", "unidades")} vale a pena trocar de modalidade tarifária ` +
+      `(${trocas.map((i) => `${i.unidade.id}: ${i.unidade.modalidade.toLowerCase()} para ${i.analise.modalidadeRecomendada.toLowerCase()}`).join("; ")}). ` +
+      "Nesses casos, a economia considera demanda e energia; nas demais, só o ajuste de demanda.");
+  }
   if (imagens.economia) {
     const altura = LARGURA_UTIL * (Math.max(320, 70 * completos.length + 120) / 1000);
     doc.garantirEspaco(altura + 4);
@@ -381,18 +442,25 @@ export async function gerarPdf(itens, imagens, meta) {
     doc.y += altura + 6;
   }
   doc.subtitulo("Valores recomendados", 12);
-  const linhasResumo = [];
-  for (const { unidade, analise } of [...completos].sort((a, b) => b.analise.economia - a.analise.economia)) {
-    for (const [posto, r] of Object.entries(analise.resultados)) {
-      linhasResumo.push([nome(unidade), unidade.modalidade === "Azul" ? posto : "Única", acao(r), kw(r.atual), kw(r.otima), reais(r.economia)]);
-    }
-  }
-  doc.tabela(["Unidade consumidora", "Posto", "Ação", "Contratada atual", "Recomendada", "Economia no período"], linhasResumo, {
-    alinharDireita: [3, 4, 5], larguras: [62],
-    rodape: ["Total", "", "", "", "", reais(economiaTotal)],
-  });
+  const ordenados = [...completos].sort((a, b) => b.analise.economia - a.analise.economia);
+  const linhasResumo = ordenados.map(({ unidade, analise }) => [
+    nome(unidade),
+    analise.trocar ? `${unidade.modalidade} para ${analise.modalidadeRecomendada}` : `${unidade.modalidade} (manter)`,
+    textoContratos(contratosAtuais(unidade, analise)),
+    textoContratos(contratosRecomendados(analise)),
+    reais(analise.economia),
+  ]);
+  doc.tabela(["Unidade consumidora", "Modalidade", "Demanda contratada atual", "Demanda recomendada", "Economia no período"],
+    linhasResumo, {
+      alinharDireita: [4], larguras: [58],
+      destacar: (i) => ordenados[i].analise.trocar, corDestaque: FUNDO_DESTAQUE,
+      rodape: ["Total", "", "", "", reais(economiaTotal)],
+    });
+  if (trocas.length) doc.paragrafo("Linhas destacadas: unidades em que se recomenda trocar de modalidade.", { tamanho: 8.5, cor: SUAVE });
   doc.subtitulo("Próximos passos", 12);
   doc.marcadores([
+    ...(trocas.length ? ["Solicitar à distribuidora a troca de modalidade nas unidades indicadas, junto com o novo valor de " +
+      "demanda contratada; confirmar as condições e prazos para a mudança."] : []),
     "Priorizar as unidades com maior economia e, entre elas, as que hoje pagam multas de ultrapassagem: o aumento da " +
       "demanda contratada pode ser solicitado a qualquer momento.",
     "Para reduções, verificar com a distribuidora os prazos de antecedência e de carência previstos no contrato e na " +

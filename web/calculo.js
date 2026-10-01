@@ -76,3 +76,87 @@ export function analisarPosto(medidas, tarifa, atual) {
     mesesUltrapassagemOtima: detalheOtimo.filter((l) => l.multa > 0).length,
   };
 }
+
+// ---------------------------------------------------------------- escolha da modalidade
+
+// Subgrupos que podem escolher a tarifa verde; os demais (A1, A2, A3) só podem ser azul
+export const SUBGRUPOS_COM_VERDE = ["A3A", "A4", "AS"];
+
+/** Contratada que minimiza o custo de demanda de um posto. Retorna {contratada, custo}. */
+function demandaOtimaPosto(medidas, tarifa) {
+  const [contratada, custo] = demandaOtima(curvaCusto(medidas, tarifa));
+  return { contratada, custo };
+}
+
+/**
+ * Compara o custo total (demanda + energia) do período nas modalidades verde e azul,
+ * cada uma com a demanda contratada ótima, e com a situação atual.
+ *
+ * linhas: meses com contratada/medida (fora de ponta ou única), contratada_p/medida_p e
+ *   consumo_p/consumo_fp (kWh).
+ * tarifas: {Verde: {demanda, energia_p, energia_fp}, Azul: {demanda_p, demanda_fp, energia_p, energia_fp}}
+ *   (R$/kW e R$/kWh, com tributos).
+ *
+ * Na verde a demanda é uma só: a maior do mês, em qualquer horário. Na azul, ponta e fora de
+ * ponta são cobradas separadamente. Para uma unidade verde, a demanda na ponta não é medida
+ * separadamente; ela é considerada igual à demanda máxima (premissa conservadora: não
+ * favorece a azul).
+ */
+export function compararModalidades(linhas, tarifas, { modalidadeAtual, subgrupo = null, fator = 1 }) {
+  if (linhas.some((l) => l.consumo_p == null || l.consumo_fp == null)) {
+    return { disponivel: false, motivo: "Faltam os consumos de energia (kWh) na ponta e fora de ponta." };
+  }
+  const azulAtual = modalidadeAtual === "Azul";
+  const completa = (t, campos) => t && campos.every((c) => t[c] > 0);
+  const tv = completa(tarifas.Verde, ["demanda", "energia_p", "energia_fp"]) ? tarifas.Verde : null;
+  const ta = completa(tarifas.Azul, ["demanda_p", "demanda_fp", "energia_p", "energia_fp"]) ? tarifas.Azul : null;
+  if (!(azulAtual ? ta : tv)) {
+    return { disponivel: false, motivo: `Faltam as tarifas da modalidade ${modalidadeAtual} para a comparação.` };
+  }
+
+  const medidaFp = linhas.map((l) => l.medida * fator);
+  const medidaP = linhas.map((l) => (azulAtual ? l.medida_p : l.medida) * fator);
+  const medidaUnica = medidaFp.map((m, i) => Math.max(m, medidaP[i]));
+  const energia = (t) => soma(linhas.map((l) => (l.consumo_p * t.energia_p + l.consumo_fp * t.energia_fp) * fator));
+  const ultima = (campo) => linhas.map((l) => l[campo]).filter((v) => v != null).at(-1);
+
+  // Situação atual: modalidade e contratos de hoje
+  const custoDemandaAtual = azulAtual
+    ? custoTotal(ultima("contratada_p"), medidaP, ta.demanda_p) + custoTotal(ultima("contratada"), medidaFp, ta.demanda_fp)
+    : custoTotal(ultima("contratada"), medidaUnica, tv.demanda);
+  const custoEnergiaAtual = energia(azulAtual ? ta : tv);
+  const atual = {
+    modalidade: modalidadeAtual,
+    custoDemanda: custoDemandaAtual,
+    custoEnergia: custoEnergiaAtual,
+    total: custoDemandaAtual + custoEnergiaAtual,
+  };
+
+  const opcoes = {};
+  const verdePermitida = !subgrupo || SUBGRUPOS_COM_VERDE.includes(subgrupo.toUpperCase());
+  if (tv && verdePermitida) {
+    const unica = demandaOtimaPosto(medidaUnica, tv.demanda);
+    const custoEnergia = energia(tv);
+    opcoes.Verde = { postos: { Demanda: unica }, custoDemanda: unica.custo, custoEnergia, total: unica.custo + custoEnergia };
+  }
+  if (ta) {
+    const ponta = demandaOtimaPosto(medidaP, ta.demanda_p);
+    const foraPonta = demandaOtimaPosto(medidaFp, ta.demanda_fp);
+    const custoEnergia = energia(ta);
+    const custoDemanda = ponta.custo + foraPonta.custo;
+    opcoes.Azul = { postos: { "Ponta": ponta, "Fora de ponta": foraPonta }, custoDemanda, custoEnergia, total: custoDemanda + custoEnergia };
+  }
+  const melhor = Object.keys(opcoes).reduce((a, b) => (opcoes[b].total < opcoes[a].total ? b : a));
+  const outra = Object.keys(opcoes).find((m) => m !== melhor);
+  return {
+    disponivel: true,
+    atual,
+    opcoes,
+    melhor,
+    economia: atual.total - opcoes[melhor].total,
+    diferencaEntreModalidades: outra ? opcoes[outra].total - opcoes[melhor].total : null,
+    verdePermitida,
+    faltaOutraModalidade: !outra && verdePermitida,
+    pontaEstimada: !azulAtual,
+  };
+}

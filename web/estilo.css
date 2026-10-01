@@ -153,3 +153,14 @@ tr.selecionada, tr.selecionada td { background: var(--verde-claro); }
 }
 
 .grafico-economia { height: 320px; margin-bottom: 12px; }
+
+/* Comparação de modalidades */
+.tarifas-modalidade { border: 1px solid var(--borda); border-radius: var(--raio); padding: 4px 12px 8px; margin: 0; }
+.tarifas-modalidade legend { font-weight: 600; padding: 0 4px; }
+.tarifas-modalidade .campo { margin: 8px 0; font-weight: 400; font-size: 0.9rem; }
+.modalidade-card { border: 2px solid var(--verde); border-radius: var(--raio); background: var(--cartao); padding: 12px 14px; margin: 12px 0; }
+.modalidade-card h3 { margin-top: 0; }
+table.comparacao td:not(:first-child), table.comparacao th:not(:first-child) { text-align: right; }
+tr.melhor td { background: var(--verde-claro); font-weight: 600; }
+table.comparacao td, table.comparacao th { white-space: normal; }
+table.comparacao td:nth-child(2) { min-width: 120px; }
